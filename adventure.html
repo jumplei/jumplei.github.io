@@ -1,0 +1,2475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>道道大冒险</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #121525;
+      color: #fff;
+      font-family: "Microsoft YaHei", Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .game-wrap {
+      width: 960px;
+      max-width: 96vw;
+      border: 6px solid #2e3358;
+      border-radius: 12px;
+      background: #1e2340;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.65);
+      position: relative;
+    }
+
+    canvas {
+      width: 100%;
+      display: block;
+      image-rendering: pixelated;
+      background: #7ec850;
+      touch-action: none;
+    }
+
+    .touch-controls {
+      display: none;
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .touch-joystick {
+      position: absolute;
+      left: 20px;
+      bottom: 58px;
+      width: 116px;
+      height: 116px;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-radius: 50%;
+      background: rgba(10, 14, 34, 0.42);
+      pointer-events: auto;
+    }
+
+    .touch-stick {
+      position: absolute;
+      left: 36px;
+      top: 36px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(122, 247, 255, 0.72);
+      box-shadow: 0 0 14px rgba(122, 247, 255, 0.35);
+    }
+
+    .touch-buttons {
+      position: absolute;
+      right: 18px;
+      bottom: 52px;
+      display: grid;
+      grid-template-columns: repeat(2, 58px);
+      gap: 10px;
+      pointer-events: auto;
+    }
+
+    .touch-btn {
+      width: 58px;
+      height: 58px;
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-radius: 50%;
+      color: #fff;
+      background: rgba(34, 42, 82, 0.68);
+      font: 700 13px "Microsoft YaHei", Arial, sans-serif;
+      text-shadow: 0 1px 2px #000;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    .touch-btn:active,
+    .touch-btn.active {
+      background: rgba(122, 247, 255, 0.45);
+      border-color: rgba(255, 255, 255, 0.75);
+    }
+
+    .tips {
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #cfd7ff;
+      background: #171a30;
+      line-height: 1.7;
+      border-top: 4px solid #2e3358;
+    }
+
+    .tips strong {
+      color: #ffe27a;
+    }
+
+    @media (pointer: coarse), (max-width: 820px) {
+      body {
+        align-items: flex-start;
+      }
+
+      .game-wrap {
+        width: 100vw;
+        max-width: 100vw;
+        border: 0;
+        border-radius: 0;
+      }
+
+      .touch-controls {
+        display: block;
+      }
+
+      .tips {
+        font-size: 12px;
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="game-wrap">
+  <canvas id="game" width="640" height="360"></canvas>
+  <div class="touch-controls" aria-label="触摸控制">
+    <div class="touch-joystick" id="touchJoystick" aria-label="移动摇杆">
+      <div class="touch-stick" id="touchStick"></div>
+    </div>
+    <div class="touch-buttons">
+      <button class="touch-btn" data-key="Space" data-action="attack" type="button">攻击</button>
+      <button class="touch-btn" data-key="KeyK" data-action="magic" type="button">魔法</button>
+      <button class="touch-btn" data-key="ShiftLeft" data-action="dash" type="button">冲刺</button>
+      <button class="touch-btn" data-key="KeyF" data-action="interact" type="button">交互</button>
+    </div>
+  </div>
+  <div class="tips">
+    <strong>操作：</strong>
+    WASD / 方向键移动，Shift 冲刺，空格 / J 普攻，K 魔法弹，靠近 NPC 按 F 对话。触摸屏可用左侧摇杆和右侧按钮操作。地图上的红色生命果可以恢复生命值。
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+const W = canvas.width;
+const H = canvas.height;
+
+const TILE = 16;
+const MAP_W = 90;
+const MAP_H = 60;
+const WORLD_W = MAP_W * TILE;
+const WORLD_H = MAP_H * TILE;
+
+const mapCacheCanvas = document.createElement("canvas");
+mapCacheCanvas.width = WORLD_W;
+mapCacheCanvas.height = WORLD_H;
+const mapCacheCtx = mapCacheCanvas.getContext("2d");
+mapCacheCtx.imageSmoothingEnabled = false;
+let mapCacheTheme = null;
+
+const keys = {};
+const virtualMove = { x: 0, y: 0 };
+const rand = seededRandom(2026);
+
+let message = "欢迎来到《道道大冒险》！准备启程。";
+let messageTimer = 240;
+let gameWon = false;
+let level = 1;
+let selectedStartLevel = 1;
+let empoweredRestart = false;
+const MAX_LEVEL = 5;
+
+const levelTransition = {
+  active: false,
+  timer: 0,
+  duration: 180
+};
+
+const finalEnding = {
+  active: false,
+  timer: 0,
+  duration: 420
+};
+
+let audioCtx = null;
+let bgmStarted = false;
+let bgmTimer = null;
+const MASTER_VOLUME = 3.2;
+const PANEL_BG = "rgba(56, 72, 120, 0.34)";
+const PANEL_BORDER = "rgba(64, 80, 128, 0.9)";
+
+const intro = {
+  active: true,
+  blink: 0
+};
+
+const levelIntroTexts = [
+  "第一关：先热身，学会边走边打。",
+  "第二关：怪物变多了，注意拉扯站位。",
+  "第三关：战场更拥挤，优先清理近身敌人。",
+  "第四关：敌人更快，利用冲刺与魔法衔接。",
+  "第五关：最终试炼，守住节奏就是胜利。"
+];
+
+const npcName = "诺诺";
+
+document.addEventListener("keydown", e => {
+  keys[e.code] = true;
+  unlockAudioContext();
+
+  if (finalEnding.active && e.code === "KeyR") {
+    returnToIntroAfterFinal();
+    return;
+  }
+
+  if (!intro.active && player.hp <= 0) {
+    if (e.code === "KeyR") {
+      retryCurrentLevel();
+    }
+
+    if (e.code === "KeyT") {
+      restartFromBeginning();
+    }
+
+    return;
+  }
+
+  if (intro.active) {
+    if (e.code === "ArrowLeft" || e.code === "KeyA") {
+      selectedStartLevel = clamp(selectedStartLevel - 1, 1, MAX_LEVEL);
+      playSound("step");
+      return;
+    }
+
+    if (e.code === "ArrowRight" || e.code === "KeyD") {
+      selectedStartLevel = clamp(selectedStartLevel + 1, 1, MAX_LEVEL);
+      playSound("step");
+      return;
+    }
+  }
+
+  if (intro.active && e.code === "Space") {
+    startSelectedLevel();
+    keys.Space = false;
+    return;
+  }
+
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+    e.preventDefault();
+  }
+});
+
+document.addEventListener("keyup", e => {
+  keys[e.code] = false;
+});
+
+document.addEventListener("pointerdown", unlockAudioContext, { once: true });
+setupTouchControls();
+
+function startSelectedLevel() {
+  intro.active = false;
+  level = selectedStartLevel;
+  totalKilled = 0;
+  resetCurrentLevelState();
+  showMessage(`从第 ${level} 关开始冒险！愿星光与你同在。`);
+  playSound("portal");
+}
+
+function setupTouchControls() {
+  const joystick = document.getElementById("touchJoystick");
+  const stick = document.getElementById("touchStick");
+  const buttons = document.querySelectorAll(".touch-btn");
+  if (!joystick || !stick) return;
+
+  let joystickPointerId = null;
+  const maxStickOffset = 38;
+  const deadZone = 0.18;
+
+  const updateJoystick = e => {
+    const rect = joystick.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const rawX = e.clientX - centerX;
+    const rawY = e.clientY - centerY;
+    const dist = Math.hypot(rawX, rawY);
+    const limit = Math.min(maxStickOffset, dist || 0);
+    const nx = dist > 0 ? rawX / dist : 0;
+    const ny = dist > 0 ? rawY / dist : 0;
+    const strength = clamp(dist / maxStickOffset, 0, 1);
+
+    stick.style.transform = `translate(${nx * limit}px, ${ny * limit}px)`;
+    virtualMove.x = strength > deadZone ? nx * strength : 0;
+    virtualMove.y = strength > deadZone ? ny * strength : 0;
+  };
+
+  const resetJoystick = () => {
+    joystickPointerId = null;
+    virtualMove.x = 0;
+    virtualMove.y = 0;
+    stick.style.transform = "translate(0, 0)";
+  };
+
+  joystick.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    unlockAudioContext();
+    joystickPointerId = e.pointerId;
+    joystick.setPointerCapture(e.pointerId);
+    updateJoystick(e);
+  });
+
+  joystick.addEventListener("pointermove", e => {
+    if (e.pointerId !== joystickPointerId) return;
+    e.preventDefault();
+    updateJoystick(e);
+  });
+
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach(type => {
+    joystick.addEventListener(type, e => {
+      if (e.pointerId === joystickPointerId || type === "lostpointercapture") {
+        resetJoystick();
+      }
+    });
+  });
+
+  buttons.forEach(button => {
+    const key = button.dataset.key;
+
+    button.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      unlockAudioContext();
+
+      if (handleTouchMenuAction(button.dataset.action)) return;
+
+      keys[key] = true;
+      button.classList.add("active");
+      button.setPointerCapture(e.pointerId);
+    });
+
+    const releaseButton = e => {
+      if (key) keys[key] = false;
+      button.classList.remove("active");
+    };
+
+    button.addEventListener("pointerup", releaseButton);
+    button.addEventListener("pointercancel", releaseButton);
+    button.addEventListener("lostpointercapture", releaseButton);
+  });
+
+  window.addEventListener("blur", () => {
+    resetJoystick();
+    buttons.forEach(button => {
+      const key = button.dataset.key;
+      if (key) keys[key] = false;
+      button.classList.remove("active");
+    });
+  });
+}
+
+function handleTouchMenuAction(action) {
+  if (finalEnding.active) {
+    returnToIntroAfterFinal();
+    return true;
+  }
+
+  if (!intro.active && player.hp <= 0) {
+    if (action === "interact" || action === "attack") {
+      retryCurrentLevel();
+      return true;
+    }
+  }
+
+  if (intro.active && (action === "interact" || action === "attack")) {
+    startSelectedLevel();
+    return true;
+  }
+
+  if (!intro.active && action === "interact") {
+    if (distance(player, npc) < 36) {
+      showMessage(`${npcName}：${getNpcDialogue()}`);
+      playSound("talk");
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+function seededRandom(seed) {
+  return function() {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+}
+
+// ================= 地图 =================
+
+const map = [];
+
+for (let y = 0; y < MAP_H; y++) {
+  map[y] = [];
+
+  for (let x = 0; x < MAP_W; x++) {
+    let tile = 0;
+
+    if (x < 2 || y < 2 || x > MAP_W - 3 || y > MAP_H - 3) {
+      tile = 1;
+    } else {
+      const r = rand();
+
+      if (r < 0.055) tile = 2;
+      else if (r < 0.115) tile = 3;
+      else if (r < 0.16) tile = 4;
+      else tile = 0;
+    }
+
+    if (x > 35 && x < 50 && y > 25 && y < 36) {
+      tile = 0;
+    }
+
+    map[y][x] = tile;
+  }
+}
+
+function isBlockedTile(tx, ty) {
+  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+  return map[ty][tx] === 1 || map[ty][tx] === 2 || map[ty][tx] === 3;
+}
+
+function isBlockedRect(x, y, w, h) {
+  const left = Math.floor(x / TILE);
+  const right = Math.floor((x + w - 1) / TILE);
+  const top = Math.floor(y / TILE);
+  const bottom = Math.floor((y + h - 1) / TILE);
+
+  for (let ty = top; ty <= bottom; ty++) {
+    for (let tx = left; tx <= right; tx++) {
+      if (isBlockedTile(tx, ty)) return true;
+    }
+  }
+
+  return false;
+}
+
+function getRandomFreePosition(randomFn = rand) {
+  for (let i = 0; i < 2000; i++) {
+    const tx = Math.floor(randomFn() * MAP_W);
+    const ty = Math.floor(randomFn() * MAP_H);
+
+    if (!isBlockedTile(tx, ty)) {
+      return {
+        x: tx * TILE + 4,
+        y: ty * TILE + 4
+      };
+    }
+  }
+
+  return { x: WORLD_W / 2, y: WORLD_H / 2 };
+}
+
+// ================= 玩家 =================
+
+const player = {
+  x: WORLD_W / 2,
+  y: WORLD_H / 2,
+  w: 12,
+  h: 14,
+  speed: 1.35,
+  hp: 100,
+  maxHp: 100,
+  stamina: 100,
+  maxStamina: 100,
+  mp: 100,
+  maxMp: 100,
+  facing: "down",
+  attackCd: 0,
+  magicCd: 0,
+  magicHintCd: 0,
+  magicHoming: false,
+  scatterMagic: false,
+  magicBounce: false,
+  hurtCd: 0,
+  stepCd: 0,
+
+  moving: false,
+  anim: 0
+};
+
+let camera = {
+  x: 0,
+  y: 0
+};
+
+// ================= NPC =================
+
+const npc = {
+  x: WORLD_W / 2 + 70,
+  y: WORLD_H / 2 - 40,
+  w: 12,
+  h: 16
+};
+
+const npcDialogues = [
+  "先别贪刀，观察怪物动作再出手。",
+  "风向变了，旅人。被围时先冲刺脱离，再回头反打。",
+  "你的节奏更稳了！记住：魔法弹适合先手削血。",
+  "这一关速度很快，别站桩，移动中也要持续输出。",
+  "最后试炼了！相信自己，把星光带回这片大陆。"
+];
+
+// ================= 通关星门 =================
+
+const portal = {
+  x: WORLD_W / 2 - 120,
+  y: WORLD_H / 2 + 50,
+  w: 24,
+  h: 28,
+  active: false,
+  anim: 0
+};
+
+// ================= 资源、补血道具与怪物 =================
+
+const crystals = [];
+const healthItems = [];
+const magicHomingItems = [];
+const enemies = [];
+const projectiles = [];
+const slashEffects = [];
+
+let collected = 0;
+let killed = 0;
+let totalKilled = 0;
+
+spawnLevelEntities();
+
+// ================= 主循环 =================
+
+const TARGET_FRAME_MS = 1000 / 60;
+let lastTime = 0;
+requestAnimationFrame(loop);
+
+function loop(time) {
+  if (lastTime && time - lastTime < TARGET_FRAME_MS - 0.5) {
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  const dt = lastTime ? Math.min((time - lastTime) / 16.67, 2) : 1;
+  lastTime = time;
+
+  update(dt);
+  draw();
+
+  requestAnimationFrame(loop);
+}
+
+function update(dt) {
+  if (intro.active) {
+    intro.blink += dt;
+    camera.x = clamp(WORLD_W / 2 - W / 2, 0, WORLD_W - W);
+    camera.y = clamp(WORLD_H / 2 - H / 2, 0, WORLD_H - H);
+    return;
+  }
+
+  if (player.hp <= 0) return;
+
+  if (levelTransition.active) {
+    updateLevelTransition(dt);
+    updateCamera();
+    if (messageTimer > 0) messageTimer--;
+    return;
+  }
+
+  if (finalEnding.active) {
+    updateFinalEnding(dt);
+    updateCamera();
+    if (messageTimer > 0) messageTimer--;
+    return;
+  }
+
+  updatePlayer(dt);
+  updateProjectiles(dt);
+  updateEnemies(dt);
+  updateCrystals(dt);
+  updateHealthItems(dt);
+  updateMagicHomingItems(dt);
+  updateSlashEffects(dt);
+  updateCamera();
+  updatePortal(dt);
+
+  if (messageTimer > 0) messageTimer--;
+
+  if (!portal.active && collected >= getLevelCrystalGoal() && killed >= getLevelKillGoal() && isBossGoalComplete()) {
+    portal.active = true;
+    portal.anim = 0;
+    showMessage("任务目标完成！古老星门已经开启，走进星门即可通关！");
+    playSound("goal");
+    playSound("portal");
+  }
+}
+
+function updatePlayer(dt) {
+  let dx = 0;
+  let dy = 0;
+
+  if (keys.KeyW || keys.ArrowUp) dy--;
+  if (keys.KeyS || keys.ArrowDown) dy++;
+  if (keys.KeyA || keys.ArrowLeft) dx--;
+  if (keys.KeyD || keys.ArrowRight) dx++;
+  dx += virtualMove.x;
+  dy += virtualMove.y;
+
+  player.moving = dx !== 0 || dy !== 0;
+
+  if (player.moving) {
+    const len = Math.hypot(dx, dy);
+    dx /= len;
+    dy /= len;
+
+    player.anim += dt;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      player.facing = dx > 0 ? "right" : "left";
+    } else {
+      player.facing = dy > 0 ? "down" : "up";
+    }
+  } else {
+    player.anim = 0;
+  }
+
+  let speed = player.speed;
+
+  const dash = keys.ShiftLeft || keys.ShiftRight;
+
+  if (dash && player.stamina > 0 && player.moving) {
+    speed = 2.35;
+    player.stamina -= 1.3 * dt;
+  } else {
+    player.stamina += 0.55 * dt;
+  }
+
+  player.stamina = clamp(player.stamina, 0, player.maxStamina);
+  player.mp = clamp(player.mp + 0.22 * dt, 0, player.maxMp);
+
+  moveEntity(player, dx * speed * dt, dy * speed * dt);
+
+  if (player.attackCd > 0) player.attackCd -= dt;
+  if (player.magicCd > 0) player.magicCd -= dt;
+  if (player.magicHintCd > 0) player.magicHintCd -= dt;
+  if (player.hurtCd > 0) player.hurtCd -= dt;
+  if (player.stepCd > 0) player.stepCd -= dt;
+
+  if (player.moving && player.stepCd <= 0) {
+    playSound("step");
+    player.stepCd = dash ? 10 : 14;
+  }
+
+  if ((keys.Space || keys.KeyJ) && player.attackCd <= 0) {
+    swordAttack();
+    // 初始较慢，随累计击败数平滑加快
+    player.attackCd = getAttackCooldown();
+  }
+
+  if (keys.KeyK && player.magicCd <= 0) {
+    const magicCost = 28;
+
+    if (player.mp >= magicCost) {
+      player.mp -= magicCost;
+      castMagic();
+      player.magicCd = 42;
+    } else if (player.magicHintCd <= 0) {
+      showMessage("能量不足，无法释放魔法弹！");
+      player.magicHintCd = 50;
+    }
+  }
+
+  if (keys.KeyF && distance(player, npc) < 36) {
+    showMessage(`${npcName}：${getNpcDialogue()}`);
+    playSound("talk");
+  }
+}
+
+function moveEntity(ent, dx, dy) {
+  if (dx !== 0) {
+    ent.x += dx;
+
+    if (isBlockedRect(ent.x, ent.y, ent.w, ent.h)) {
+      ent.x -= dx;
+    }
+  }
+
+  if (dy !== 0) {
+    ent.y += dy;
+
+    if (isBlockedRect(ent.x, ent.y, ent.w, ent.h)) {
+      ent.y -= dy;
+    }
+  }
+
+  ent.x = clamp(ent.x, 0, WORLD_W - ent.w);
+  ent.y = clamp(ent.y, 0, WORLD_H - ent.h);
+}
+
+function swordAttack() {
+  playSound("slash");
+
+  let sx = player.x;
+  let sy = player.y;
+  let sw = 18;
+  let sh = 18;
+
+  if (player.facing === "up") {
+    sx = player.x - 3;
+    sy = player.y - 16;
+    sw = 18;
+    sh = 16;
+  } else if (player.facing === "down") {
+    sx = player.x - 3;
+    sy = player.y + 12;
+    sw = 18;
+    sh = 16;
+  } else if (player.facing === "left") {
+    sx = player.x - 16;
+    sy = player.y - 2;
+    sw = 16;
+    sh = 18;
+  } else if (player.facing === "right") {
+    sx = player.x + 12;
+    sy = player.y - 2;
+    sw = 16;
+    sh = 18;
+  }
+
+  slashEffects.push({
+    x: sx,
+    y: sy,
+    w: sw,
+    h: sh,
+    life: 10
+  });
+
+  enemies.forEach(e => {
+    if (e.alive && rectsOverlap({ x: sx, y: sy, w: sw, h: sh }, e)) {
+      damageEnemy(e, 18);
+    }
+  });
+}
+
+function castMagic() {
+  playSound("magic");
+
+  let vx = 0;
+  let vy = 0;
+
+  if (player.facing === "up") vy = -2.8;
+  if (player.facing === "down") vy = 2.8;
+  if (player.facing === "left") vx = -2.8;
+  if (player.facing === "right") vx = 2.8;
+
+  if (player.scatterMagic) {
+    const sideOffsets = [-1.35, 0, 1.35];
+
+    sideOffsets.forEach(offset => {
+      let shotVx = vx;
+      let shotVy = vy;
+      let spawnOffsetX = 0;
+      let spawnOffsetY = 0;
+
+      if (vx !== 0) {
+        shotVy = offset;
+        spawnOffsetY = offset * 3;
+      } else {
+        shotVx = offset;
+        spawnOffsetX = offset * 3;
+      }
+
+      const speed = Math.hypot(vx, vy) || 2.8;
+      const len = Math.hypot(shotVx, shotVy) || 1;
+
+      addPlayerMagicProjectile(shotVx / len * speed, shotVy / len * speed, spawnOffsetX, spawnOffsetY, 10);
+    });
+
+    return;
+  }
+
+  addPlayerMagicProjectile(vx, vy);
+}
+
+function addPlayerMagicProjectile(vx, vy, offsetX = 0, offsetY = 0, homingDelay = 0) {
+  projectiles.push({
+    owner: "player",
+    homing: player.magicHoming,
+    homingDelay,
+    bounce: player.magicBounce,
+    bounces: player.magicBounce ? 6 : 0,
+    x: player.x + player.w / 2 - 3 + offsetX,
+    y: player.y + player.h / 2 - 3 + offsetY,
+    w: 6,
+    h: 6,
+    vx,
+    vy,
+    life: 90
+  });
+}
+
+function castEnemyMagic(e, dx, dy, len) {
+  const speed = 1.75;
+
+  projectiles.push({
+    owner: "enemy",
+    homing: empoweredRestart,
+    homingDelay: empoweredRestart ? 12 : 0,
+    x: e.x + e.w / 2 - 3,
+    y: e.y + e.h / 2 - 3,
+    w: 6,
+    h: 6,
+    vx: dx / len * speed,
+    vy: dy / len * speed,
+    life: 120,
+    damage: e.magicDamage || 9
+  });
+}
+
+function castBossMagic(e) {
+  const speed = 1.55;
+  const dirs = [
+    [1, 0], [1, 1], [0, 1], [-1, 1],
+    [-1, 0], [-1, -1], [0, -1], [1, -1]
+  ];
+
+  dirs.forEach(([dx, dy]) => {
+    const len = Math.hypot(dx, dy) || 1;
+
+    projectiles.push({
+      owner: "enemy",
+      homing: empoweredRestart,
+      homingDelay: empoweredRestart ? 14 : 0,
+      bounce: empoweredRestart,
+      bounces: empoweredRestart ? 8 : 0,
+      x: e.x + e.w / 2 - 3,
+      y: e.y + e.h / 2 - 3,
+      w: 6,
+      h: 6,
+      vx: dx / len * speed,
+      vy: dy / len * speed,
+      life: 130,
+      damage: e.magicDamage || 13
+    });
+  });
+}
+
+function updateProjectiles(dt) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    const prevX = p.x;
+    const prevY = p.y;
+
+    if (p.homingDelay > 0) p.homingDelay -= dt;
+
+    if (p.homing && p.homingDelay <= 0) {
+      let target = null;
+      let bestDistSq = Infinity;
+
+      if (p.owner === "enemy") {
+        target = player;
+      } else {
+        for (const e of enemies) {
+          if (!e.alive) continue;
+
+          const dx = e.x + e.w / 2 - (p.x + p.w / 2);
+          const dy = e.y + e.h / 2 - (p.y + p.h / 2);
+          const distSq = dx * dx + dy * dy;
+
+          if (distSq < bestDistSq) {
+            bestDistSq = distSq;
+            target = e;
+          }
+        }
+      }
+
+      if (target) {
+        const speed = Math.hypot(p.vx, p.vy) || 2.8;
+        const dx = target.x + target.w / 2 - (p.x + p.w / 2);
+        const dy = target.y + target.h / 2 - (p.y + p.h / 2);
+        const len = Math.hypot(dx, dy) || 1;
+
+        p.vx = dx / len * speed;
+        p.vy = dy / len * speed;
+      }
+    }
+
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt;
+
+    if (p.life <= 0) {
+      projectiles.splice(i, 1);
+      continue;
+    }
+
+    if (isBlockedRect(p.x, p.y, p.w, p.h)) {
+      if (p.bounce && p.bounces > 0) {
+        const blockedX = isBlockedRect(p.x, prevY, p.w, p.h);
+        const blockedY = isBlockedRect(prevX, p.y, p.w, p.h);
+
+        p.x = prevX;
+        p.y = prevY;
+
+        if (blockedX || !blockedY) p.vx *= -1;
+        if (blockedY || !blockedX) p.vy *= -1;
+
+        p.bounces--;
+        p.homingDelay = Math.max(p.homingDelay || 0, 8);
+        playSound("step");
+        continue;
+      }
+
+      projectiles.splice(i, 1);
+      continue;
+    }
+
+    if (p.owner === "enemy") {
+      if (player.hurtCd <= 0 && rectsOverlap(p, player)) {
+        const hitDamage = p.damage || 9;
+        player.hp -= hitDamage;
+        player.hurtCd = 25;
+        projectiles.splice(i, 1);
+        showMessage(`你被远程魔法击中，受到 ${hitDamage} 点伤害！`);
+
+        if (player.hp <= 0) {
+          player.hp = 0;
+          showMessage("你倒下了，刷新页面可以重新开始。");
+        } else {
+          playSound("hurt");
+        }
+
+        continue;
+      }
+
+      continue;
+    }
+
+    for (const e of enemies) {
+      if (e.alive && rectsOverlap(p, e)) {
+        damageEnemy(e, 24);
+        projectiles.splice(i, 1);
+        break;
+      }
+    }
+  }
+}
+
+function updateEnemies(dt) {
+enemies.forEach(e => {
+    if (!e.alive) return;
+
+    e.anim += dt;
+    if (e.hurt > 0) e.hurt -= dt;
+    if (e.attackCd > 0) e.attackCd -= dt;
+    if (e.magicCd > 0) e.magicCd -= dt;
+
+    const d = distance(e, player);
+
+    if (d < (e.detectRange || 120)) {
+      const dx = player.x - e.x;
+      const dy = player.y - e.y;
+      const len = Math.hypot(dx, dy) || 1;
+
+      if (e.boss) {
+        moveEntity(e, dx / len * e.speed * dt, dy / len * e.speed * dt);
+
+        if (d < (e.magicRange || 230) && e.magicCd <= 0) {
+          castBossMagic(e);
+          e.magicCd = e.magicInterval;
+        }
+      } else if (e.ranged) {
+        if (d > 115) {
+          moveEntity(e, dx / len * e.speed * dt, dy / len * e.speed * dt);
+        } else if (d < 70) {
+          moveEntity(e, -dx / len * e.speed * dt, -dy / len * e.speed * dt);
+        }
+
+        if (d < (e.magicRange || 170) && e.magicCd <= 0) {
+          castEnemyMagic(e, dx, dy, len);
+          e.magicCd = e.magicInterval + Math.random() * 35;
+        }
+      } else {
+        moveEntity(e, dx / len * e.speed * dt, dy / len * e.speed * dt);
+      }
+    }
+
+    if (rectsOverlap(e, player) && e.attackCd <= 0 && player.hurtCd <= 0) {
+      const hitDamage = e.damage || 8;
+      player.hp -= hitDamage;
+      player.hurtCd = 25;
+      e.attackCd = e.attackInterval || 50;
+
+      showMessage(e.boss ? `你被BOSS重创，受到 ${hitDamage} 点伤害！` : "你被小怪撞到了！");
+
+      if (player.hp <= 0) {
+        player.hp = 0;
+        showMessage("你倒下了，刷新页面可以重新开始。");
+      } else {
+        playSound("hurt");
+      }
+    }
+  });
+}
+
+function updateCrystals(dt) {
+  crystals.forEach(c => {
+    if (c.taken) return;
+
+    c.anim += dt;
+
+    if (distancePoint(player.x + player.w / 2, player.y + player.h / 2, c.x + 4, c.y + 4) < 16) {
+      c.taken = true;
+      collected++;
+      showMessage(`获得星晶：${collected} / ${getLevelCrystalGoal()}`);
+      playSound("pickup");
+    }
+  });
+}
+
+function updateHealthItems(dt) {
+  healthItems.forEach(item => {
+    if (item.taken) return;
+
+    item.anim += dt;
+
+    if (item.noticeCd > 0) {
+      item.noticeCd -= dt;
+    }
+
+    const px = player.x + player.w / 2;
+    const py = player.y + player.h / 2;
+    const ix = item.x + 6;
+    const iy = item.y + 6;
+
+    if (distancePoint(px, py, ix, iy) < 16) {
+      if (player.hp < player.maxHp) {
+        item.taken = true;
+        const before = player.hp;
+        player.hp = Math.min(player.maxHp, player.hp + item.heal);
+        const realHeal = player.hp - before;
+        showMessage(`获得生命果，恢复 ${realHeal} 点生命！`);
+        playSound("heal");
+      } else {
+        if (item.noticeCd <= 0) {
+          showMessage("生命值已满，暂时不需要生命果。");
+          item.noticeCd = 90;
+        }
+      }
+    }
+  });
+}
+
+function updateMagicHomingItems(dt) {
+  magicHomingItems.forEach(item => {
+    if (item.taken) return;
+
+    item.anim += dt;
+
+    const px = player.x + player.w / 2;
+    const py = player.y + player.h / 2;
+    const ix = item.x + 6;
+    const iy = item.y + 6;
+
+    if (distancePoint(px, py, ix, iy) < 16) {
+      item.taken = true;
+      if (empoweredRestart) {
+        player.magicBounce = true;
+        showMessage("获得回响符！本关内魔法弹遇到障碍物会反弹。");
+      } else {
+        player.magicHoming = true;
+        showMessage("获得追星符！本关内魔法弹会追踪敌人，射程不变。");
+      }
+      playSound("magic");
+    }
+  });
+}
+
+
+function updatePortal(dt) {
+  portal.anim += dt;
+
+  if (!portal.active || gameWon || levelTransition.active || finalEnding.active) return;
+
+  if (rectsOverlap(player, portal)) {
+    if (level >= MAX_LEVEL) {
+      startFinalEnding();
+    } else {
+      startLevelTransition();
+    }
+  }
+}
+
+function updateSlashEffects(dt) {
+  for (let i = slashEffects.length - 1; i >= 0; i--) {
+    slashEffects[i].life -= dt;
+
+    if (slashEffects[i].life <= 0) {
+      slashEffects.splice(i, 1);
+    }
+  }
+}
+
+function damageEnemy(e, damage) {
+  e.hp -= damage;
+  e.hurt = 8;
+
+  if (e.hp <= 0) {
+    e.alive = false;
+    killed++;
+    totalKilled++;
+    if (e.boss) player.scatterMagic = true;
+    showMessage(e.boss ? "你击败了BOSS！获得三发散射魔法！" : `击败小怪：${killed} / ${getLevelKillGoal()}`);
+    playSound("kill");
+  }
+}
+
+function isBossGoalComplete() {
+  return level !== MAX_LEVEL || enemies.some(e => e.boss && !e.alive);
+}
+
+function updateCamera() {
+  camera.x = Math.floor(player.x + player.w / 2 - W / 2);
+  camera.y = Math.floor(player.y + player.h / 2 - H / 2);
+
+  camera.x = clamp(camera.x, 0, WORLD_W - W);
+  camera.y = clamp(camera.y, 0, WORLD_H - H);
+}
+
+// ================= 绘制 =================
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  if (intro.active) {
+    drawMap();
+    drawIntroScreen();
+    return;
+  }
+
+  drawMap();
+  drawHealthItems();
+  drawMagicHomingItems();
+  drawCrystals();
+  drawPortal();
+  drawNPC();
+  drawEnemies();
+  drawProjectiles();
+  drawPlayer();
+  drawSlashEffects();
+  drawHUD();
+  drawMessage();
+
+  if (player.hp <= 0) {
+    drawGameOver();
+  }
+
+  if (levelTransition.active) {
+    drawLevelTransitionOverlay();
+  }
+
+  if (finalEnding.active) {
+    drawFinalEndingOverlay();
+  }
+}
+
+function drawMap() {
+  if (mapCacheTheme !== empoweredRestart) {
+    renderMapCache();
+  }
+
+  ctx.drawImage(
+    mapCacheCanvas,
+    Math.floor(camera.x),
+    Math.floor(camera.y),
+    W,
+    H,
+    0,
+    0,
+    W,
+    H
+  );
+}
+
+function renderMapCache() {
+  mapCacheTheme = empoweredRestart;
+  mapCacheCtx.clearRect(0, 0, WORLD_W, WORLD_H);
+
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      drawCachedMapTile(x * TILE, y * TILE, x, y, map[y][x]);
+    }
+  }
+}
+
+function drawCachedMapTile(px, py, tx, ty, tile) {
+  if (tile === 0) drawCachedGrass(px, py, tx, ty);
+
+  if (tile === 1) drawCachedWater(px, py);
+
+  if (tile === 2) {
+    drawCachedGrass(px, py, tx, ty);
+    drawCachedRock(px, py);
+  }
+
+  if (tile === 3) {
+    drawCachedGrass(px, py, tx, ty);
+    drawCachedTree(px, py);
+  }
+
+  if (tile === 4) {
+    drawCachedGrass(px, py, tx, ty);
+    drawCachedFlowers(px, py);
+  }
+}
+
+function drawCachedGrass(x, y, tx, ty) {
+  if (empoweredRestart) {
+    mapCacheCtx.fillStyle = ((tx + ty) % 2 === 0) ? "#172033" : "#121a2a";
+    mapCacheCtx.fillRect(x, y, TILE, TILE);
+
+    mapCacheCtx.fillStyle = "rgba(124, 255, 205, 0.08)";
+    mapCacheCtx.fillRect(x + 2, y + 3, 2, 1);
+    mapCacheCtx.fillRect(x + 10, y + 11, 2, 1);
+    return;
+  }
+
+  mapCacheCtx.fillStyle = ((tx + ty) % 2 === 0) ? "#65b84a" : "#5dac43";
+  mapCacheCtx.fillRect(x, y, TILE, TILE);
+
+  mapCacheCtx.fillStyle = "rgba(255,255,255,0.08)";
+  mapCacheCtx.fillRect(x + 2, y + 3, 2, 1);
+  mapCacheCtx.fillRect(x + 10, y + 11, 2, 1);
+}
+
+function drawCachedWater(x, y) {
+  if (empoweredRestart) {
+    mapCacheCtx.fillStyle = "#11152d";
+    mapCacheCtx.fillRect(x, y, TILE, TILE);
+
+    mapCacheCtx.fillStyle = "#334d8f";
+    mapCacheCtx.fillRect(x + 2, y + 5, 8, 1);
+    mapCacheCtx.fillRect(x + 6, y + 10, 7, 1);
+    return;
+  }
+
+  mapCacheCtx.fillStyle = "#3b8dce";
+  mapCacheCtx.fillRect(x, y, TILE, TILE);
+
+  mapCacheCtx.fillStyle = "#69c9ff";
+  mapCacheCtx.fillRect(x + 2, y + 5, 8, 1);
+  mapCacheCtx.fillRect(x + 6, y + 10, 7, 1);
+}
+
+function drawCachedRock(x, y) {
+  if (empoweredRestart) {
+    mapCacheCtx.fillStyle = "#30364d";
+    mapCacheCtx.fillRect(x + 3, y + 6, 10, 7);
+
+    mapCacheCtx.fillStyle = "#69708e";
+    mapCacheCtx.fillRect(x + 5, y + 5, 5, 2);
+
+    mapCacheCtx.fillStyle = "#151827";
+    mapCacheCtx.fillRect(x + 9, y + 10, 3, 2);
+    return;
+  }
+
+  mapCacheCtx.fillStyle = "#666b7f";
+  mapCacheCtx.fillRect(x + 3, y + 6, 10, 7);
+
+  mapCacheCtx.fillStyle = "#9ca1b5";
+  mapCacheCtx.fillRect(x + 5, y + 5, 5, 2);
+
+  mapCacheCtx.fillStyle = "#3d4050";
+  mapCacheCtx.fillRect(x + 9, y + 10, 3, 2);
+}
+
+function drawCachedTree(x, y) {
+  if (empoweredRestart) {
+    mapCacheCtx.fillStyle = "#37233a";
+    mapCacheCtx.fillRect(x + 7, y + 8, 3, 7);
+
+    mapCacheCtx.fillStyle = "#1f4760";
+    mapCacheCtx.fillRect(x + 4, y + 3, 9, 8);
+
+    mapCacheCtx.fillStyle = "#2d6480";
+    mapCacheCtx.fillRect(x + 6, y + 1, 6, 6);
+
+    mapCacheCtx.fillStyle = "#142b42";
+    mapCacheCtx.fillRect(x + 3, y + 7, 11, 4);
+    return;
+  }
+
+  mapCacheCtx.fillStyle = "#6b3d22";
+  mapCacheCtx.fillRect(x + 7, y + 8, 3, 7);
+
+  mapCacheCtx.fillStyle = "#2f8f46";
+  mapCacheCtx.fillRect(x + 4, y + 3, 9, 8);
+
+  mapCacheCtx.fillStyle = "#41b35b";
+  mapCacheCtx.fillRect(x + 6, y + 1, 6, 6);
+
+  mapCacheCtx.fillStyle = "#1e6f36";
+  mapCacheCtx.fillRect(x + 3, y + 7, 11, 4);
+}
+
+function drawCachedFlowers(x, y) {
+  if (empoweredRestart) {
+    mapCacheCtx.fillStyle = "#121a2a";
+    mapCacheCtx.fillRect(x, y, TILE, TILE);
+
+    mapCacheCtx.fillStyle = "#7dffcb";
+    mapCacheCtx.fillRect(x + 4, y + 6, 2, 2);
+
+    mapCacheCtx.fillStyle = "#b56bff";
+    mapCacheCtx.fillRect(x + 10, y + 10, 2, 2);
+    return;
+  }
+
+  mapCacheCtx.fillStyle = "#5dac43";
+  mapCacheCtx.fillRect(x, y, TILE, TILE);
+
+  mapCacheCtx.fillStyle = "#ffdd68";
+  mapCacheCtx.fillRect(x + 4, y + 6, 2, 2);
+
+  mapCacheCtx.fillStyle = "#ff77bd";
+  mapCacheCtx.fillRect(x + 10, y + 10, 2, 2);
+}
+
+function drawIntroScreen() {
+  ctx.fillStyle = "rgba(8, 12, 28, 0.72)";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = "#7af7ff";
+  ctx.font = "30px monospace";
+  const title = "道道大冒险";
+  ctx.fillText(title, W / 2 - ctx.measureText(title).width / 2, 72);
+
+  ctx.fillStyle = "#d9e7ff";
+  ctx.font = "12px monospace";
+  const subtitle = "星门再度开启，旅程即将出发";
+  ctx.fillText(subtitle, W / 2 - ctx.measureText(subtitle).width / 2, 96);
+
+  drawIntroElements();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "11px monospace";
+  const storyLine1 = "灾厄撕裂了星门，黑雾吞没大陆边境。";
+  const storyLine2 = "主角道道将与向导诺诺并肩，夺回星晶，点亮世界。";
+  ctx.fillText(storyLine1, W / 2 - ctx.measureText(storyLine1).width / 2, 248);
+  ctx.fillText(storyLine2, W / 2 - ctx.measureText(storyLine2).width / 2, 266);
+
+  if (Math.sin(intro.blink / 8) > -0.15) {
+    ctx.fillStyle = "#ffe27a";
+    ctx.font = "16px monospace";
+    const startHint = "按 空格键 开始冒险";
+    ctx.fillText(startHint, W / 2 - ctx.measureText(startHint).width / 2, 340);
+  }
+
+  const chooseText = `选择起始关卡：< ${selectedStartLevel} >`;
+  const chooseHint = "← / → 切换关卡";
+  ctx.fillStyle = "#d8e6ff";
+  ctx.font = "12px monospace";
+  ctx.fillText(chooseText, W / 2 - ctx.measureText(chooseText).width / 2, 290);
+  ctx.font = "10px monospace";
+  ctx.fillText(chooseHint, W / 2 - ctx.measureText(chooseHint).width / 2, 304);
+}
+
+function drawIntroHero(x, y) {
+  ctx.fillStyle = "rgba(0,0,0,0.14)";
+  ctx.fillRect(x + 8, y + 46, 24, 5);
+
+  ctx.fillStyle = "#e33a3a";
+  ctx.fillRect(x + 10, y + 42, 6, 4);
+  ctx.fillRect(x + 24, y + 42, 6, 4);
+
+  ctx.fillStyle = "#3156d4";
+  ctx.fillRect(x + 11, y + 18, 18, 24);
+
+  ctx.fillStyle = "#4c73ff";
+  ctx.fillRect(x + 13, y + 20, 8, 16);
+
+  ctx.fillStyle = "#ffd49a";
+  ctx.fillRect(x + 11, y + 5, 18, 14);
+
+  ctx.fillStyle = "#fff06a";
+  ctx.fillRect(x + 9, y + 1, 22, 6);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(x + 15, y + 10, 2, 2);
+  ctx.fillRect(x + 23, y + 10, 2, 2);
+}
+
+function drawIntroElements() {
+  const y = 162;
+  const count = 6;
+  const spacing = 64;
+  const firstCenterX = W / 2 - ((count - 1) * spacing) / 2;
+  const centers = Array.from({ length: count }, (_, i) => firstCenterX + i * spacing);
+
+  // 1) 星晶
+  const crystalX = centers[0] - 4;
+  ctx.fillStyle = "#7af7ff";
+  ctx.fillRect(crystalX, y - 2, 8, 20);
+  ctx.fillStyle = "#dffcff";
+  ctx.fillRect(crystalX + 3, y + 2, 2, 10);
+
+  // 2) 小怪
+  const enemyX = centers[1] - 11;
+  ctx.fillStyle = "#8a62ff";
+  ctx.fillRect(enemyX, y, 22, 16);
+  ctx.fillRect(enemyX + 6, y - 7, 10, 8);
+  ctx.fillStyle = "#30205d";
+  ctx.fillRect(enemyX + 6, y + 6, 3, 3);
+  ctx.fillRect(enemyX + 13, y + 6, 3, 3);
+
+  // 3) 道道（主角）
+  drawIntroHero(centers[2] - 20, y - 26);
+
+  // 4) 诺诺（NPC）
+  const npcX = centers[3] - 9;
+  ctx.fillStyle = "#7546c9";
+  ctx.fillRect(npcX, y - 2, 18, 22);
+  ctx.fillStyle = "#ffd49a";
+  ctx.fillRect(npcX, y - 16, 18, 14);
+
+  // 5) 生命果
+  const fruitX = centers[4] - 7;
+  ctx.fillStyle = "#ff4d6d";
+  ctx.fillRect(fruitX, y + 2, 14, 14);
+  ctx.fillStyle = "#56e27a";
+  ctx.fillRect(fruitX + 4, y - 4, 8, 5);
+
+  // 6) 星门
+  const gateX = centers[5] - 15;
+  ctx.fillStyle = "#7b86ff";
+  ctx.fillRect(gateX, y - 12, 8, 30);
+  ctx.fillRect(gateX + 22, y - 12, 8, 30);
+  ctx.fillRect(gateX + 8, y - 16, 14, 7);
+  ctx.fillStyle = "#57f3ff";
+  // 门芯发光区域：严格居中于门框内
+  ctx.fillRect(gateX + 9, y - 8, 12, 24);
+  ctx.fillStyle = "#dffcff";
+  ctx.fillRect(gateX + 12, y - 5, 6, 18);
+
+  // 统一标签，保证排列整齐
+  ctx.fillStyle = "#cfe2ff";
+  ctx.font = "10px monospace";
+  const labels = ["星晶", "小怪", "道道", "诺诺", "生命果", "星门"];
+  labels.forEach((text, i) => {
+    ctx.fillText(text, centers[i] - ctx.measureText(text).width / 2, 206);
+  });
+}
+
+function drawPlayer() {
+  const x = Math.floor(player.x - camera.x);
+  const y = Math.floor(player.y - camera.y);
+
+  // 步态优化：不做上下跳跃，只做对角手脚摆动
+  const walkT = player.moving ? player.anim / 5 : 0;
+  const footA = player.moving ? Math.round(Math.sin(walkT)) : 0;
+  const sideStep = player.moving ? (Math.sin(walkT) >= 0 ? 2 : -2) : 0;
+  const footB = -footA;
+  const armA = -footA;
+  const armB = footA;
+
+  const bodyY = y;
+
+  if (player.hurtCd > 0 && Math.floor(player.hurtCd) % 4 < 2) {
+    ctx.globalAlpha = 0.45;
+  }
+
+  // 影子：固定不动，减少跳跃感
+  ctx.fillStyle = "rgba(0,0,0,0.14)";
+  ctx.fillRect(x + 1, y + 13, 11, 3);
+
+  // 脚部：根据朝向做交替步伐
+  ctx.fillStyle = "#e33a3a";
+
+  if (player.facing === "left") {
+    ctx.fillRect(x + 3 + sideStep, y + 12, 3, 2);
+    ctx.fillRect(x + 6 - sideStep, y + 14, 3, 2);
+  } else if (player.facing === "right") {
+    ctx.fillRect(x + 3 + sideStep, y + 14, 3, 2);
+    ctx.fillRect(x + 6 - sideStep, y + 12, 3, 2);
+  } else if (player.facing === "up") {
+    ctx.fillRect(x + 2, y + 13 - Math.sign(footA), 3, 2);
+    ctx.fillRect(x + 8, y + 13 - Math.sign(footB), 3, 2);
+  } else {
+    ctx.fillRect(x + 2, y + 13 + Math.sign(footA), 3, 2);
+    ctx.fillRect(x + 8, y + 13 + Math.sign(footB), 3, 2);
+  }
+
+  // 斗篷主体
+  ctx.fillStyle = "#3156d4";
+  ctx.fillRect(x + 3, bodyY + 5, 7, 8);
+
+  // 斗篷摆动，不改变身体高度
+  if (player.moving) {
+    ctx.fillStyle = "#2443ad";
+
+    if (player.facing === "left") {
+      ctx.fillRect(x + 9 + (footA > 0 ? 1 : 0), bodyY + 7, 2, 5);
+    } else if (player.facing === "right") {
+      ctx.fillRect(x + 2 - (footA > 0 ? 1 : 0), bodyY + 7, 2, 5);
+    } else {
+      ctx.fillRect(x + 4, bodyY + 11, 5, 2);
+    }
+  }
+
+  // 身体亮面
+  ctx.fillStyle = "#4c73ff";
+  ctx.fillRect(x + 4, bodyY + 6, 3, 5);
+
+  // 简单手臂摆动
+  if (player.moving) {
+    ctx.fillStyle = "#ffd49a";
+
+    if (player.facing === "left" || player.facing === "right") {
+      ctx.fillRect(x + 2, bodyY + 7 + Math.sign(armA), 1, 3);
+      ctx.fillRect(x + 10, bodyY + 7 + Math.sign(armB), 1, 3);
+    } else {
+      ctx.fillRect(x + 2, bodyY + 7 + Math.sign(armA), 1, 3);
+      ctx.fillRect(x + 10, bodyY + 7 + Math.sign(armB), 1, 3);
+    }
+  }
+
+  // 头
+  ctx.fillStyle = "#ffd49a";
+  ctx.fillRect(x + 3, bodyY + 1, 7, 6);
+
+  // 头发
+  ctx.fillStyle = "#fff06a";
+  ctx.fillRect(x + 2, bodyY, 9, 3);
+
+  ctx.fillStyle = "#d6b844";
+  ctx.fillRect(x + 2, bodyY + 2, 2, 2);
+  ctx.fillRect(x + 8, bodyY + 2, 3, 1);
+
+  // 朝向表情
+  ctx.fillStyle = "#ffffff";
+
+  if (player.facing === "down") {
+    ctx.fillRect(x + 4, bodyY + 4, 1, 1);
+    ctx.fillRect(x + 8, bodyY + 4, 1, 1);
+  }
+
+  if (player.facing === "up") {
+    ctx.fillStyle = "#fff06a";
+    ctx.fillRect(x + 4, bodyY + 1, 5, 2);
+  }
+
+  if (player.facing === "left") {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x + 3, bodyY + 4, 1, 1);
+  }
+
+  if (player.facing === "right") {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x + 9, bodyY + 4, 1, 1);
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+
+function drawPortal() {
+  const x = Math.floor(portal.x - camera.x);
+  const y = Math.floor(portal.y - camera.y);
+
+  // 阴影
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.fillRect(x + 2, y + 24, 20, 4);
+
+  if (!portal.active) {
+    // 未开启的石质星门
+    ctx.fillStyle = "#4b5068";
+    ctx.fillRect(x + 3, y + 6, 4, 20);
+    ctx.fillRect(x + 17, y + 6, 4, 20);
+    ctx.fillRect(x + 5, y + 4, 14, 4);
+
+    ctx.fillStyle = "#777d99";
+    ctx.fillRect(x + 5, y + 7, 2, 16);
+    ctx.fillRect(x + 17, y + 7, 2, 16);
+
+    ctx.fillStyle = "#2a2e42";
+    ctx.fillRect(x + 8, y + 9, 8, 14);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "8px monospace";
+
+    if (distance(player, portal) < 42) {
+      ctx.fillText("未开启", x, y - 5);
+    }
+
+    return;
+  }
+
+  // 激活后的星门
+  const pulse = Math.sin(portal.anim / 10);
+  const glow = 0.55 + pulse * 0.25;
+
+  ctx.globalAlpha = glow;
+  ctx.fillStyle = "#57f3ff";
+  ctx.fillRect(x + 6, y + 6, 12, 20);
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = "#355dff";
+  ctx.fillRect(x + 8, y + 8, 8, 16);
+
+  ctx.fillStyle = "#dffcff";
+  ctx.fillRect(x + 10, y + 10 + Math.floor(pulse * 2), 4, 8);
+
+  // 门框
+  ctx.fillStyle = "#7b86ff";
+  ctx.fillRect(x + 3, y + 5, 4, 21);
+  ctx.fillRect(x + 17, y + 5, 4, 21);
+  ctx.fillRect(x + 5, y + 3, 14, 4);
+
+  ctx.fillStyle = "#cfd7ff";
+  ctx.fillRect(x + 5, y + 6, 2, 17);
+  ctx.fillRect(x + 17, y + 6, 2, 17);
+
+  // 星点
+  ctx.fillStyle = "#fff7a8";
+  ctx.fillRect(x + 11, y + 2, 2, 2);
+  ctx.fillRect(x + 2, y + 12, 2, 2);
+  ctx.fillRect(x + 21, y + 15, 2, 2);
+
+  if (distance(player, portal) < 45) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "8px monospace";
+    ctx.fillText("进入星门", x - 4, y - 5);
+  }
+}
+
+function drawNPC() {
+  const x = Math.floor(npc.x - camera.x);
+  const y = Math.floor(npc.y - camera.y);
+
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillRect(x + 1, y + 14, 11, 3);
+
+  ctx.fillStyle = "#7546c9";
+  ctx.fillRect(x + 3, y + 5, 7, 9);
+
+  ctx.fillStyle = "#ffd49a";
+  ctx.fillRect(x + 3, y + 1, 7, 6);
+
+  ctx.fillStyle = "#4b2c83";
+  ctx.fillRect(x + 2, y, 9, 3);
+
+  if (distance(player, npc) < 36) {
+    ctx.fillStyle = "#dce6ff";
+    ctx.font = "8px monospace";
+    ctx.fillText(npcName, x - 14, y - 12);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "8px monospace";
+    ctx.fillText("F", x + 4, y - 4);
+  }
+}
+
+function drawEnemies() {
+  enemies.forEach(e => {
+    if (!e.alive) return;
+
+    const x = Math.floor(e.x - camera.x);
+    const y = Math.floor(e.y - camera.y);
+
+    if (e.boss) {
+      const sway = Math.sin(e.anim / 9) * 2;
+
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(x + 2, y + 20, 22, 4);
+
+      ctx.fillStyle = e.hurt > 0 ? "#fff2f2" : (empoweredRestart ? "#f05a9d" : "#8a2038");
+      ctx.fillRect(x + 3, y + 5 + sway, 20, 14);
+      ctx.fillRect(x + 7, y + 1 + sway, 12, 8);
+
+      ctx.fillStyle = empoweredRestart ? "#2a061d" : "#2b0910";
+      ctx.fillRect(x + 8, y + 10 + sway, 3, 3);
+      ctx.fillRect(x + 15, y + 10 + sway, 3, 3);
+
+      ctx.fillStyle = empoweredRestart ? "#7dffcb" : "#e8c65a";
+      ctx.fillRect(x + 7, y + 2 + sway, 2, 3);
+      ctx.fillRect(x + 17, y + 2 + sway, 2, 3);
+
+      ctx.fillStyle = "#2b1320";
+      ctx.fillRect(x + 1, y - 5, 24, 3);
+      ctx.fillStyle = empoweredRestart ? "#7dffcb" : "#ff4a6a";
+      ctx.fillRect(x + 1, y - 5, Math.max(0, 24 * e.hp / e.maxHp), 3);
+
+      ctx.fillStyle = "#ffe27a";
+      ctx.font = "8px monospace";
+      ctx.fillText("BOSS", x + 4, y - 8);
+      return;
+    }
+
+    const jump = Math.sin(e.anim / 8) * 2;
+
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.fillRect(x + 2, y + 12, 11, 3);
+
+    ctx.fillStyle = e.hurt > 0 ? "#ffffff" : (empoweredRestart ? "#ff9b3d" : "#8a62ff");
+    ctx.fillRect(x + 2, y + 4 + jump, 10, 8);
+    ctx.fillRect(x + 4, y + 2 + jump, 6, 4);
+
+    if (e.ranged && e.hurt <= 0) {
+      ctx.fillStyle = empoweredRestart ? "#7dffcb" : "#d66bff";
+      ctx.fillRect(x + 5, y + jump, 4, 3);
+      ctx.fillRect(x + 2, y + 5 + jump, 2, 2);
+      ctx.fillRect(x + 10, y + 5 + jump, 2, 2);
+    }
+
+    ctx.fillStyle = empoweredRestart ? "#331007" : "#30205d";
+    ctx.fillRect(x + 4, y + 7 + jump, 2, 2);
+    ctx.fillRect(x + 9, y + 7 + jump, 2, 2);
+
+    ctx.fillStyle = "#2b1320";
+    ctx.fillRect(x, y - 4, 14, 2);
+
+    ctx.fillStyle = empoweredRestart ? "#7dffcb" : "#ff4a6a";
+    ctx.fillRect(x, y - 4, Math.max(0, 14 * e.hp / e.maxHp), 2);
+  });
+}
+
+function drawCrystals() {
+  crystals.forEach(c => {
+    if (c.taken) return;
+
+    const x = Math.floor(c.x - camera.x);
+    const y = Math.floor(c.y - camera.y);
+    const bob = Math.sin(c.anim / 12) * 2;
+
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.fillRect(x + 1, y + 11, 8, 2);
+
+    ctx.fillStyle = "#7af7ff";
+    ctx.fillRect(x + 4, y + 1 + bob, 3, 10);
+
+    ctx.fillStyle = "#dffcff";
+    ctx.fillRect(x + 5, y + 2 + bob, 1, 6);
+
+    ctx.fillStyle = "#3dcbe2";
+    ctx.fillRect(x + 3, y + 4 + bob, 5, 5);
+  });
+}
+
+function drawHealthItems() {
+  healthItems.forEach(item => {
+    if (item.taken) return;
+
+    const x = Math.floor(item.x - camera.x);
+    const y = Math.floor(item.y - camera.y);
+    const bob = Math.sin(item.anim / 14) * 2;
+
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.fillRect(x + 2, y + 12, 10, 2);
+
+    // 生命果主体
+    ctx.fillStyle = "#ff4d6d";
+    ctx.fillRect(x + 4, y + 5 + bob, 7, 7);
+
+    ctx.fillStyle = "#ff8aa0";
+    ctx.fillRect(x + 5, y + 6 + bob, 3, 2);
+
+    ctx.fillStyle = "#b91d3a";
+    ctx.fillRect(x + 8, y + 9 + bob, 3, 3);
+
+    // 叶子
+    ctx.fillStyle = "#56e27a";
+    ctx.fillRect(x + 7, y + 2 + bob, 4, 3);
+
+    ctx.fillStyle = "#2fa84f";
+    ctx.fillRect(x + 6, y + 3 + bob, 2, 2);
+  });
+}
+
+function drawMagicHomingItems() {
+  magicHomingItems.forEach(item => {
+    if (item.taken) return;
+
+    const x = Math.floor(item.x - camera.x);
+    const y = Math.floor(item.y - camera.y);
+    const bob = Math.sin(item.anim / 12) * 2;
+
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.fillRect(x + 2, y + 12, 10, 2);
+
+    ctx.fillStyle = empoweredRestart ? "#ffb84d" : "#7dffcb";
+    ctx.fillRect(x + 4, y + 4 + bob, 6, 8);
+    ctx.fillRect(x + 2, y + 6 + bob, 10, 4);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x + 6, y + 6 + bob, 2, 2);
+
+    ctx.fillStyle = empoweredRestart ? "#fff06a" : "#38cfff";
+    ctx.fillRect(x + 5, y + 2 + bob, 4, 2);
+    ctx.fillRect(x + 5, y + 10 + bob, 4, 2);
+
+    if (empoweredRestart) {
+      ctx.fillStyle = "#7d3b00";
+      ctx.fillRect(x + 3, y + 5 + bob, 2, 2);
+      ctx.fillRect(x + 9, y + 9 + bob, 2, 2);
+    }
+  });
+}
+
+function drawProjectiles() {
+  projectiles.forEach(p => {
+    const x = Math.floor(p.x - camera.x);
+    const y = Math.floor(p.y - camera.y);
+
+    ctx.fillStyle = p.owner === "enemy" ? "#c85cff" : "#59f3ff";
+    ctx.fillRect(x, y, 6, 6);
+
+    ctx.fillStyle = p.owner === "enemy" ? "#f4d4ff" : "#dffcff";
+    ctx.fillRect(x + 1, y + 1, 4, 4);
+  });
+}
+
+function drawSlashEffects() {
+  slashEffects.forEach(s => {
+    const x = Math.floor(s.x - camera.x);
+    const y = Math.floor(s.y - camera.y);
+
+    ctx.globalAlpha = s.life / 10;
+    ctx.fillStyle = "#fff7a8";
+    ctx.fillRect(x, y, s.w, s.h);
+    ctx.globalAlpha = 1;
+  });
+}
+
+function drawHUD() {
+  ctx.fillStyle = PANEL_BG;
+  ctx.fillRect(8, 8, 238, 96);
+  ctx.strokeStyle = PANEL_BORDER;
+  ctx.strokeRect(8.5, 8.5, 237, 95);
+
+  ctx.fillStyle = "rgba(190, 210, 255, 0.2)";
+  ctx.fillRect(12, 12, 230, 16);
+  ctx.fillStyle = "#fff6a8";
+  ctx.font = "10px monospace";
+  ctx.fillText(`第 ${level} / ${MAX_LEVEL} 关`, 18, 23);
+  ctx.fillText(`总击败 ${totalKilled}`, 120, 23);
+
+  ctx.fillStyle = "#321725";
+  ctx.fillRect(18, 34, 120, 8);
+
+  ctx.fillStyle = "#ff4d6d";
+  ctx.fillRect(18, 34, 120 * player.hp / player.maxHp, 8);
+
+  ctx.strokeStyle = "#ffffff";
+  ctx.strokeRect(18, 34, 120, 8);
+
+  ctx.fillStyle = "#1b2b29";
+  ctx.fillRect(18, 50, 120, 6);
+
+  ctx.fillStyle = "#51f0a7";
+  ctx.fillRect(18, 50, 120 * player.stamina / player.maxStamina, 6);
+
+  ctx.strokeStyle = "#ffffff";
+  ctx.strokeRect(18, 50, 120, 6);
+
+  ctx.fillStyle = "#15243f";
+  ctx.fillRect(18, 64, 120, 6);
+
+  ctx.fillStyle = "#59b9ff";
+  ctx.fillRect(18, 64, 120 * player.mp / player.maxMp, 6);
+
+  ctx.strokeStyle = "#ffffff";
+  ctx.strokeRect(18, 64, 120, 6);
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "10px monospace";
+  ctx.fillText("HP", 145, 41);
+  ctx.fillText("STA", 145, 56);
+  ctx.fillText("ENG", 145, 70);
+
+  ctx.fillStyle = "#ffe27a";
+  ctx.fillText(`星晶 ${collected}/${getLevelCrystalGoal()}`, 18, 88);
+  ctx.fillText(`击败 ${killed}/${getLevelKillGoal()}`, 90, 88);
+  ctx.fillText(`普攻 ${ (60 / getAttackCooldown()).toFixed(1) } 次/秒`, 154, 88);
+
+  if (level === MAX_LEVEL) {
+    ctx.fillText(`BOSS ${isBossGoalComplete() ? "已败" : "未败"}`, 18, 100);
+  }
+}
+
+function drawMessage() {
+  if (messageTimer <= 0) return;
+
+  ctx.fillStyle = PANEL_BG;
+  ctx.fillRect(80, H - 84, W - 160, 42);
+
+  ctx.strokeStyle = PANEL_BORDER;
+  ctx.strokeRect(80, H - 84, W - 160, 42);
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "12px monospace";
+  wrapText(message, 96, H - 60, W - 190, 16);
+}
+
+function drawGameOver() {
+  ctx.fillStyle = "rgba(0,0,0,0.72)";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = "#ff6b8a";
+  ctx.font = "28px monospace";
+  ctx.fillText("GAME OVER", W / 2 - 80, H / 2 - 10);
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "12px monospace";
+  const retryText = "按 R 重试本关";
+  const restartText = "按 T 从第一关重新开始";
+  ctx.fillText(retryText, W / 2 - ctx.measureText(retryText).width / 2, H / 2 + 18);
+  ctx.fillText(restartText, W / 2 - ctx.measureText(restartText).width / 2, H / 2 + 38);
+}
+
+
+function drawVictory() {
+  ctx.fillStyle = "rgba(5, 10, 25, 0.68)";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = "#7af7ff";
+  ctx.font = "26px monospace";
+  ctx.fillText("CLEAR!", W / 2 - 48, H / 2 - 26);
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "13px monospace";
+  ctx.fillText("通关成功，星野大陆恢复了平静。", W / 2 - 110, H / 2 + 4);
+
+  ctx.fillStyle = "#ffe27a";
+  ctx.font = "11px monospace";
+  ctx.fillText("刷新页面可以重新开始冒险", W / 2 - 78, H / 2 + 28);
+}
+
+function drawLevelTransitionOverlay() {
+  const progress = 1 - levelTransition.timer / levelTransition.duration;
+  const pulse = Math.sin((levelTransition.duration - levelTransition.timer) / 8);
+
+  ctx.fillStyle = "rgba(6, 10, 24, 0.72)";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = "#7af7ff";
+  ctx.font = "24px monospace";
+  const title = `第 ${level} 关完成`;
+  ctx.fillText(title, W / 2 - ctx.measureText(title).width / 2, H / 2 - 30);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "12px monospace";
+  const subtitle = "星门能量重组中，请稍作休整...";
+  ctx.fillText(subtitle, W / 2 - ctx.measureText(subtitle).width / 2, H / 2 - 2);
+
+  const barW = 220;
+  const barX = (W - barW) / 2;
+  const barY = H / 2 + 24;
+
+  ctx.fillStyle = "rgba(255,255,255,0.16)";
+  ctx.fillRect(barX, barY, barW, 10);
+  ctx.fillStyle = "#6df0ff";
+  ctx.fillRect(barX, barY, barW * progress, 10);
+  ctx.strokeStyle = "#cfe6ff";
+  ctx.strokeRect(barX, barY, barW, 10);
+
+  ctx.fillStyle = "rgba(255,255,210,0.85)";
+  ctx.fillRect(W / 2 + 95 + pulse * 6, H / 2 - 44, 3, 3);
+  ctx.fillRect(W / 2 - 110 - pulse * 4, H / 2 + 36, 2, 2);
+}
+
+function drawFinalEndingOverlay() {
+  const elapsed = finalEnding.duration - finalEnding.timer;
+  const fade = Math.min(1, elapsed / 80);
+  const wave = Math.sin(elapsed / 14);
+  const centeredText = (text, y) => {
+    ctx.fillText(text, W / 2 - ctx.measureText(text).width / 2, y);
+  };
+
+  ctx.save();
+  ctx.globalAlpha = 0.86;
+  ctx.fillStyle = "#080d1f";
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+
+  // 简单星光动画
+  for (let i = 0; i < 18; i++) {
+    const sx = (i * 37 + elapsed * 0.8) % W;
+    const sy = (i * 53 + Math.sin((elapsed + i * 11) / 25) * 18 + 80) % H;
+    const size = (i % 3) + 1;
+    ctx.fillStyle = i % 2 ? "#9be8ff" : "#fff1a8";
+    ctx.fillRect(sx, sy, size, size);
+  }
+
+  ctx.globalAlpha = fade;
+  ctx.fillStyle = "#7af7ff";
+  ctx.font = "26px monospace";
+  centeredText("终章 · 星野长明", 98);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "12px monospace";
+  centeredText("你穿越五重试炼，修复了失序的星门。", 146 + wave * 2);
+  centeredText("夜空重新被点亮，旅途的传说在风中流传。", 172 + wave * 2);
+
+  ctx.fillStyle = "#ffe27a";
+  centeredText("感谢游玩，勇者。", 220 + wave * 2);
+  centeredText("星门的光芒将继续守护这片大陆。", 248 + wave * 2);
+
+  ctx.fillStyle = "#cfe2ff";
+  ctx.font = "11px monospace";
+  centeredText("按 R 回到片头重新开始，默认拥有追踪散射魔法", 292);
+
+  ctx.globalAlpha = 1;
+}
+
+function spawnLevelEntities() {
+  crystals.length = 0;
+  healthItems.length = 0;
+  magicHomingItems.length = 0;
+  enemies.length = 0;
+  projectiles.length = 0;
+  slashEffects.length = 0;
+
+  const crystalGoal = getLevelCrystalGoal();
+  const killGoal = getLevelKillGoal();
+
+  // 每关都保底生成足够通关数量，并留余量
+  const crystalCount = Math.max(14, crystalGoal + 6);
+  for (let i = 0; i < crystalCount; i++) {
+    crystals.push({
+      ...getRandomFreePosition(),
+      taken: false,
+      anim: rand() * 100
+    });
+  }
+
+  for (let i = 0; i < 8; i++) {
+    healthItems.push({
+      ...getRandomFreePosition(),
+      taken: false,
+      heal: 25,
+      anim: rand() * 100,
+      noticeCd: 0
+    });
+  }
+
+  magicHomingItems.push({
+    ...getRandomFreePosition(Math.random),
+    taken: false,
+    anim: Math.random() * 100
+  });
+
+  // 难度随关卡逐渐增强
+  const enemyCount = Math.max(killGoal + 6, Math.round(10 + (level - 1) * 3));
+  const enemyBaseSpeed = 0.52 + (level - 1) * 0.1;
+  const enemySpeedRange = 0.18 + (level - 1) * 0.04;
+  const enemyHp = 36 + (level - 1) * 10;
+  const enemyDamage = 8 + (level - 1) * 2;
+  const enemyAttackInterval = Math.max(32, 50 - (level - 1) * 3);
+  const rangedEnemyCount = Math.min(2, Math.max(1, Math.floor(enemyCount * 0.12)));
+  const rangedEnemySlots = new Set();
+
+  while (rangedEnemySlots.size < rangedEnemyCount) {
+    rangedEnemySlots.add(Math.floor(Math.random() * enemyCount));
+  }
+
+  for (let i = 0; i < enemyCount; i++) {
+    const pos = getRandomFreePosition(Math.random);
+    const ranged = rangedEnemySlots.has(i);
+
+    enemies.push({
+      ranged,
+      x: pos.x,
+      y: pos.y,
+      w: 14,
+      h: 12,
+      hp: enemyHp,
+      maxHp: enemyHp,
+      speed: (enemyBaseSpeed + Math.random() * enemySpeedRange) * (ranged ? 0.88 : 1),
+      damage: enemyDamage,
+      attackInterval: enemyAttackInterval,
+      detectRange: ranged ? 190 : 120 + level * 10,
+      magicRange: 175,
+      magicDamage: 7 + level,
+      magicInterval: Math.max(70, 120 - level * 8),
+alive: true,
+      hurt: 0,
+      attackCd: 0,
+      magicCd: ranged ? 45 + Math.random() * 70 : 0,
+      anim: Math.random() * 100
+    });
+  }
+
+  // 第五关加入BOSS
+  if (level === MAX_LEVEL) {
+    const bossPos = getRandomFreePosition(Math.random);
+
+    enemies.push({
+      boss: true,
+      x: bossPos.x,
+      y: bossPos.y,
+      w: 26,
+      h: 22,
+      hp: 420,
+      maxHp: 420,
+      speed: 1.2,
+      damage: 22,
+      attackInterval: 34,
+      detectRange: 220,
+      magicRange: 230,
+      magicDamage: 13,
+      magicInterval: 95,
+alive: true,
+      hurt: 0,
+      attackCd: 0,
+      magicCd: 70,
+      anim: Math.random() * 100
+    });
+  }
+}
+
+function startLevelTransition() {
+  levelTransition.active = true;
+  levelTransition.timer = levelTransition.duration;
+  portal.active = false;
+  player.attackCd = 0;
+  player.magicCd = 0;
+  projectiles.length = 0;
+  slashEffects.length = 0;
+  showMessage(`第 ${level} 关挑战完成，正在开启下一关...`);
+  playSound("levelup");
+}
+
+function updateLevelTransition(dt) {
+  if (!levelTransition.active) return;
+
+  levelTransition.timer -= dt;
+
+  if (levelTransition.timer <= 0) {
+    levelTransition.active = false;
+    startNextLevel();
+  }
+}
+
+function startFinalEnding() {
+  finalEnding.active = true;
+  finalEnding.timer = finalEnding.duration;
+  portal.active = false;
+  gameWon = true;
+  projectiles.length = 0;
+  slashEffects.length = 0;
+  showMessage("最终星门已修复，星野大陆重归宁静。\n终章正在展开...");
+  playSound("finale");
+}
+
+function updateFinalEnding(dt) {
+  if (!finalEnding.active) return;
+  finalEnding.timer = Math.max(0, finalEnding.timer - dt);
+}
+
+function returnToIntroAfterFinal() {
+  empoweredRestart = true;
+  intro.active = true;
+  finalEnding.active = false;
+  levelTransition.active = false;
+  gameWon = false;
+  level = 1;
+  selectedStartLevel = 1;
+  totalKilled = 0;
+  resetCurrentLevelState();
+  keys.KeyR = false;
+  showMessage("已回到片头。再次开始时默认拥有追踪散射魔法！");
+  playSound("portal");
+}
+
+function startNextLevel() {
+  level = Math.min(MAX_LEVEL, level + 1);
+  resetCurrentLevelState();
+  showMessage(levelIntroTexts[Math.max(0, level - 1)] || "新的挑战开始了！");
+}
+
+function resetCurrentLevelState() {
+  collected = 0;
+  killed = 0;
+  portal.active = false;
+  portal.anim = 0;
+  gameWon = false;
+  finalEnding.active = false;
+  levelTransition.active = false;
+
+  player.x = WORLD_W / 2;
+  player.y = WORLD_H / 2;
+  player.hp = player.maxHp;
+  player.stamina = player.maxStamina;
+  player.mp = player.maxMp;
+  player.attackCd = 0;
+  player.magicCd = 0;
+  player.magicHoming = empoweredRestart;
+  player.scatterMagic = empoweredRestart;
+  player.magicBounce = false;
+  player.hurtCd = 0;
+
+  spawnLevelEntities();
+}
+
+function retryCurrentLevel() {
+  resetCurrentLevelState();
+  showMessage(`已重试第 ${level} 关，继续战斗！`);
+  playSound("portal");
+}
+
+function restartFromBeginning() {
+  level = 1;
+  selectedStartLevel = 1;
+  totalKilled = 0;
+  resetCurrentLevelState();
+  showMessage("已从第一关重新开始。祝你好运！");
+  playSound("levelup");
+}
+
+function getNpcDialogue() {
+  return npcDialogues[Math.min(level - 1, npcDialogues.length - 1)];
+}
+
+function getLevelCrystalGoal() {
+  return 6 + (level - 1) * 2;
+}
+
+function getLevelKillGoal() {
+  return 5 + (level - 1) * 2;
+}
+
+
+// ================= 工具函数 =================
+
+function showMessage(text) {
+  message = text;
+  messageTimer = 240;
+}
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function rectsOverlap(a, b) {
+  return (
+    a.x < b.x + b.w &&
+    a.x + a.w > b.x &&
+    a.y < b.y + b.h &&
+    a.y + a.h > b.y
+  );
+}
+
+function distance(a, b) {
+  return distancePoint(
+    a.x + a.w / 2,
+    a.y + a.h / 2,
+    b.x + b.w / 2,
+    b.y + b.h / 2
+  );
+}
+
+function distancePoint(x1, y1, x2, y2) {
+  return Math.hypot(x1 - x2, y1 - y2);
+}
+
+function wrapText(text, x, y, maxWidth, lineHeight) {
+  let line = "";
+
+  for (let i = 0; i < text.length; i++) {
+    const testLine = line + text[i];
+    const metrics = ctx.measureText(testLine);
+
+    if (metrics.width > maxWidth && i > 0) {
+      ctx.fillText(line, x, y);
+      line = text[i];
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+
+  ctx.fillText(line, x, y);
+}
+
+function getAttackCooldown() {
+  const startCd = 18;
+  const minCd = 6;
+  // 指数衰减：前期变化明显，后期趋于平滑
+  return minCd + (startCd - minCd) * Math.exp(-totalKilled / 18);
+}
+
+function unlockAudioContext() {
+  if (audioCtx) {
+    if (!bgmStarted) startBgm();
+    return;
+  }
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  audioCtx = new Ctx();
+  startBgm();
+}
+
+function startBgm() {
+  if (!audioCtx || bgmStarted || bgmTimer) return;
+  bgmStarted = true;
+
+  // 64步长旋律，避免重复感；使用“提前调度”避免setInterval抖动卡顿
+  const leadPattern = [
+    392, null, 440, null, 494, null, 523, null, 494, null, 440, null, 392, null, 330, null,
+    349, null, 392, null, 440, null, 466, null, 440, null, 392, null, 349, null, 330, null,
+    330, null, 349, 392, 440, null, 392, null, 349, null, 330, null, 294, null, 330, null,
+    349, null, 392, null, 440, null, 494, null, 523, null, 494, null, 440, null, 392, null
+  ];
+
+  const bassPattern = [73, 73, 73, 73, 82, 82, 82, 82, 65, 65, 65, 65, 55, 55, 55, 55];
+  const chordRoots = [147, 165, 131, 110];
+
+  const bpm = 108;
+  const stepDur = 60 / bpm / 2; // 八分音符
+  const lookAhead = 0.22;
+  const tickMs = 40;
+
+  let step = 0;
+  let nextTime = audioCtx.currentTime + 0.03;
+
+  const scheduleTone = (time, freq, type, peak, sustain) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, time);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.exponentialRampToValueAtTime(peak, time + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + sustain);
+
+    osc.start(time);
+    osc.stop(time + sustain + 0.02);
+  };
+
+  bgmTimer = setInterval(() => {
+    if (!audioCtx || audioCtx.state !== "running") return;
+
+    while (nextTime < audioCtx.currentTime + lookAhead) {
+      const i = step % leadPattern.length;
+      const barStep = step % 16;
+
+      const lead = leadPattern[i];
+      if (lead) {
+        scheduleTone(nextTime, lead, "triangle", 0.085, stepDur * 0.9);
+      }
+
+      if (barStep % 2 === 0) {
+        const b = bassPattern[barStep];
+        scheduleTone(nextTime, b, "sine", 0.06, stepDur * 1.2);
+      }
+
+      if (barStep % 4 === 0) {
+        const root = chordRoots[Math.floor(barStep / 4) % chordRoots.length];
+        scheduleTone(nextTime, root, "sawtooth", 0.03, stepDur * 3.2);
+        scheduleTone(nextTime, root * 1.25, "sawtooth", 0.024, stepDur * 3.2);
+      }
+
+      if (barStep === 4 || barStep === 12) {
+        scheduleTone(nextTime, 1200, "square", 0.018, stepDur * 0.35);
+      }
+
+      step++;
+      nextTime += stepDur;
+    }
+  }, tickMs);
+}
+
+function playSound(type) {
+  if (!audioCtx) return;
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+
+  if (type === "goal") {
+    playGoalMelody();
+    return;
+  }
+
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  const now = audioCtx.currentTime;
+  let freq = 440;
+  let duration = 0.08;
+  let volume = 0.055;
+  let wave = "square";
+
+  if (type === "slash") { freq = 220; duration = 0.06; volume = 0.08; }
+  if (type === "magic") { freq = 620; duration = 0.09; volume = 0.095; wave = "triangle"; }
+  if (type === "kill") { freq = 180; duration = 0.12; volume = 0.11; }
+  if (type === "hurt") { freq = 140; duration = 0.08; volume = 0.085; }
+  if (type === "portal") { freq = 760; duration = 0.12; volume = 0.10; wave = "sine"; }
+  if (type === "levelup") { freq = 520; duration = 0.16; volume = 0.11; wave = "triangle"; }
+  if (type === "finale") { freq = 680; duration = 0.22; volume = 0.12; wave = "sine"; }
+  if (type === "pickup") { freq = 560; duration = 0.05; volume = 0.075; wave = "triangle"; }
+  if (type === "heal") { freq = 500; duration = 0.07; volume = 0.085; wave = "sine"; }
+  if (type === "talk") { freq = 420; duration = 0.04; volume = 0.055; wave = "triangle"; }
+  if (type === "step") { freq = 190; duration = 0.025; volume = 0.04; wave = "square"; }
+  volume = Math.min(0.35, volume * MASTER_VOLUME);
+
+  osc.type = wave;
+  osc.frequency.setValueAtTime(freq, now);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(60, freq * 0.75), now + duration);
+
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+  osc.start(now);
+  osc.stop(now + duration + 0.01);
+}
+
+function playGoalMelody() {
+  const now = audioCtx.currentTime;
+  const notes = [659, 784, 988, 1175];
+  const noteDur = 0.12;
+  const volume = Math.min(0.35, 0.09 * MASTER_VOLUME);
+
+  notes.forEach((freq, i) => {
+    const start = now + i * 0.095;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(freq, start);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + noteDur);
+
+    osc.start(start);
+    osc.stop(start + noteDur + 0.02);
+  });
+}
+</script>
+
+</body>
+</html>
