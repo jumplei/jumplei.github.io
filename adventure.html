@@ -2,11 +2,16 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>道道大冒险</title>
   <style>
     * {
       box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html {
+      touch-action: none;
     }
 
     body {
@@ -19,6 +24,10 @@
       align-items: center;
       min-height: 100vh;
       overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
 
     .game-wrap {
@@ -29,6 +38,10 @@
       background: #1e2340;
       box-shadow: 0 0 40px rgba(0, 0, 0, 0.65);
       position: relative;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
 
     canvas {
@@ -46,6 +59,16 @@
       pointer-events: none;
       touch-action: none;
       user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    .game-wrap[data-control-mode="touch"] .touch-controls {
+      display: block;
+    }
+
+    .game-wrap[data-control-mode="keyboard"] .touch-controls {
+      display: none;
     }
 
     .touch-joystick {
@@ -89,15 +112,63 @@
       color: #fff;
       background: rgba(34, 42, 82, 0.68);
       font: 700 13px "Microsoft YaHei", Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       text-shadow: 0 1px 2px #000;
       pointer-events: auto;
       touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
 
     .touch-btn:active,
     .touch-btn.active {
       background: rgba(122, 247, 255, 0.45);
       border-color: rgba(255, 255, 255, 0.75);
+    }
+
+    .control-mode-panel {
+      display: none;
+      position: absolute;
+      left: 50%;
+      top: 78%;
+      transform: translate(-50%, -50%);
+      gap: 10px;
+      align-items: center;
+      padding: 8px 10px;
+      border: 1px solid rgba(207, 226, 255, 0.35);
+      border-radius: 999px;
+      background: rgba(8, 12, 28, 0.72);
+      color: #d8e6ff;
+      font-size: 12px;
+      pointer-events: auto;
+      touch-action: none;
+      z-index: 2;
+    }
+
+    .game-wrap[data-intro="true"] .control-mode-panel {
+      display: flex;
+    }
+
+    .control-mode-option {
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 999px;
+      padding: 6px 12px;
+      color: #d8e6ff;
+      background: rgba(34, 42, 82, 0.84);
+      font: 700 12px "Microsoft YaHei", Arial, sans-serif;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    .control-mode-option.active {
+      color: #11182d;
+      background: #7af7ff;
+      border-color: #ffffff;
     }
 
     .tips {
@@ -125,10 +196,6 @@
         border-radius: 0;
       }
 
-      .touch-controls {
-        display: block;
-      }
-
       .tips {
         font-size: 12px;
         padding-bottom: max(10px, env(safe-area-inset-bottom));
@@ -138,17 +205,22 @@
 </head>
 <body>
 
-<div class="game-wrap">
+<div class="game-wrap" data-control-mode="keyboard" data-intro="true">
   <canvas id="game" width="640" height="360"></canvas>
+  <div class="control-mode-panel" aria-label="选择控制方式">
+    <span>控制方式</span>
+    <button class="control-mode-option" data-mode="touch" type="button">触屏</button>
+    <button class="control-mode-option" data-mode="keyboard" type="button">键盘</button>
+  </div>
   <div class="touch-controls" aria-label="触摸控制">
     <div class="touch-joystick" id="touchJoystick" aria-label="移动摇杆">
       <div class="touch-stick" id="touchStick"></div>
     </div>
     <div class="touch-buttons">
-      <button class="touch-btn" data-key="Space" data-action="attack" type="button">攻击</button>
-      <button class="touch-btn" data-key="KeyK" data-action="magic" type="button">魔法</button>
-      <button class="touch-btn" data-key="ShiftLeft" data-action="dash" type="button">冲刺</button>
-      <button class="touch-btn" data-key="KeyF" data-action="interact" type="button">交互</button>
+      <div class="touch-btn" data-key="Space" data-action="attack" role="button" aria-label="攻击">攻击</div>
+      <div class="touch-btn" data-key="KeyK" data-action="magic" role="button" aria-label="魔法">魔法</div>
+      <div class="touch-btn" data-key="ShiftLeft" data-action="dash" role="button" aria-label="冲刺">冲刺</div>
+      <div class="touch-btn" data-key="KeyF" data-action="interact" role="button" aria-label="交互">交互</div>
     </div>
   </div>
   <div class="tips">
@@ -159,6 +231,7 @@
 
 <script>
 const canvas = document.getElementById("game");
+const gameWrap = document.querySelector(".game-wrap");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 
@@ -181,6 +254,7 @@ let mapCacheTheme = null;
 const keys = {};
 const virtualMove = { x: 0, y: 0 };
 const rand = seededRandom(2026);
+let controlMode = window.matchMedia("(pointer: coarse)").matches ? "touch" : "keyboard";
 
 let message = "欢迎来到《道道大冒险》！准备启程。";
 let messageTimer = 240;
@@ -257,6 +331,13 @@ document.addEventListener("keydown", e => {
       playSound("step");
       return;
     }
+
+    if (e.code === "ArrowUp" || e.code === "ArrowDown" || e.code === "KeyW" || e.code === "KeyS") {
+      setControlMode(controlMode === "touch" ? "keyboard" : "touch");
+      playSound("step");
+      e.preventDefault();
+      return;
+    }
   }
 
   if (intro.active && e.code === "Space") {
@@ -275,15 +356,62 @@ document.addEventListener("keyup", e => {
 });
 
 document.addEventListener("pointerdown", unlockAudioContext, { once: true });
+setupControlModeChooser();
 setupTouchControls();
+setupTouchBrowserGuards();
+updateControlModeUI();
 
 function startSelectedLevel() {
   intro.active = false;
+  updateControlModeUI();
   level = selectedStartLevel;
   totalKilled = 0;
   resetCurrentLevelState();
   showMessage(`从第 ${level} 关开始冒险！愿星光与你同在。`);
   playSound("portal");
+}
+
+function setupControlModeChooser() {
+  document.querySelectorAll(".control-mode-option").forEach(button => {
+    button.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      unlockAudioContext();
+      setControlMode(button.dataset.mode);
+    });
+  });
+}
+
+function setControlMode(mode) {
+  if (mode !== "touch" && mode !== "keyboard") return;
+  controlMode = mode;
+  releaseTouchInput();
+  updateControlModeUI();
+}
+
+function updateControlModeUI() {
+  if (!gameWrap) return;
+  gameWrap.dataset.controlMode = controlMode;
+  gameWrap.dataset.intro = intro.active ? "true" : "false";
+
+  document.querySelectorAll(".control-mode-option").forEach(button => {
+    button.classList.toggle("active", button.dataset.mode === controlMode);
+  });
+}
+
+function releaseTouchInput() {
+  virtualMove.x = 0;
+  virtualMove.y = 0;
+  keys.Space = false;
+  keys.KeyK = false;
+  keys.ShiftLeft = false;
+  keys.KeyF = false;
+
+  const stick = document.getElementById("touchStick");
+  if (stick) stick.style.transform = "translate(0, 0)";
+
+  document.querySelectorAll(".touch-btn").forEach(button => {
+    button.classList.remove("active");
+  });
 }
 
 function setupTouchControls() {
@@ -321,6 +449,7 @@ function setupTouchControls() {
   };
 
   joystick.addEventListener("pointerdown", e => {
+    if (controlMode !== "touch") return;
     e.preventDefault();
     unlockAudioContext();
     joystickPointerId = e.pointerId;
@@ -329,6 +458,7 @@ function setupTouchControls() {
   });
 
   joystick.addEventListener("pointermove", e => {
+    if (controlMode !== "touch") return;
     if (e.pointerId !== joystickPointerId) return;
     e.preventDefault();
     updateJoystick(e);
@@ -346,6 +476,7 @@ function setupTouchControls() {
     const key = button.dataset.key;
 
     button.addEventListener("pointerdown", e => {
+      if (controlMode !== "touch") return;
       e.preventDefault();
       unlockAudioContext();
 
@@ -357,6 +488,7 @@ function setupTouchControls() {
     });
 
     const releaseButton = e => {
+      e.preventDefault();
       if (key) keys[key] = false;
       button.classList.remove("active");
     };
@@ -374,6 +506,23 @@ function setupTouchControls() {
       button.classList.remove("active");
     });
   });
+}
+
+function setupTouchBrowserGuards() {
+  if (!gameWrap) return;
+
+  const stopBrowserGesture = e => {
+    if (gameWrap.contains(e.target)) {
+      e.preventDefault();
+    }
+  };
+
+  gameWrap.addEventListener("contextmenu", e => e.preventDefault());
+  document.addEventListener("gesturestart", stopBrowserGesture, { passive: false });
+  document.addEventListener("gesturechange", stopBrowserGesture, { passive: false });
+  document.addEventListener("gestureend", stopBrowserGesture, { passive: false });
+  document.addEventListener("touchstart", stopBrowserGesture, { passive: false });
+  document.addEventListener("touchmove", stopBrowserGesture, { passive: false });
 }
 
 function handleTouchMenuAction(action) {
@@ -1378,12 +1527,12 @@ function drawIntroScreen() {
   if (Math.sin(intro.blink / 8) > -0.15) {
     ctx.fillStyle = "#ffe27a";
     ctx.font = "16px monospace";
-    const startHint = "按 空格键 开始冒险";
+    const startHint = controlMode === "touch" ? "点 攻击 / 交互 开始冒险" : "按 空格键 开始冒险";
     ctx.fillText(startHint, W / 2 - ctx.measureText(startHint).width / 2, 340);
   }
 
   const chooseText = `选择起始关卡：< ${selectedStartLevel} >`;
-  const chooseHint = "← / → 切换关卡";
+  const chooseHint = "← / → 切换关卡，↑ / ↓ 切换控制方式";
   ctx.fillStyle = "#d8e6ff";
   ctx.font = "12px monospace";
   ctx.fillText(chooseText, W / 2 - ctx.measureText(chooseText).width / 2, 290);
@@ -2194,6 +2343,7 @@ function returnToIntroAfterFinal() {
   totalKilled = 0;
   resetCurrentLevelState();
   keys.KeyR = false;
+  updateControlModeUI();
   showMessage("已回到片头。再次开始时默认拥有追踪散射魔法！");
   playSound("portal");
 }
