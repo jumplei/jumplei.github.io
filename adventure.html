@@ -71,11 +71,11 @@
       -webkit-touch-callout: none;
     }
 
-    .game-wrap[data-control-mode="touch"] .touch-controls {
+    .game-wrap[data-touch-controls="true"] .touch-controls {
       display: block;
     }
 
-    .game-wrap[data-control-mode="keyboard"] .touch-controls {
+    .game-wrap[data-touch-controls="false"] .touch-controls {
       display: none;
     }
 
@@ -137,48 +137,6 @@
       border-color: rgba(255, 255, 255, 0.75);
     }
 
-    .control-mode-panel {
-      display: none;
-      position: absolute;
-      left: 50%;
-      top: 78%;
-      transform: translate(-50%, -50%);
-      gap: 10px;
-      align-items: center;
-      padding: 8px 10px;
-      border: 1px solid rgba(207, 226, 255, 0.35);
-      border-radius: 999px;
-      background: rgba(8, 12, 28, 0.72);
-      color: #d8e6ff;
-      font-size: 12px;
-      pointer-events: auto;
-      touch-action: none;
-      z-index: 2;
-    }
-
-    .game-wrap[data-intro="true"] .control-mode-panel {
-      display: flex;
-    }
-
-    .control-mode-option {
-      border: 1px solid rgba(255, 255, 255, 0.35);
-      border-radius: 999px;
-      padding: 6px 12px;
-      color: #d8e6ff;
-      background: rgba(34, 42, 82, 0.84);
-      font: 700 12px "Microsoft YaHei", Arial, sans-serif;
-      touch-action: none;
-      user-select: none;
-      -webkit-user-select: none;
-      -webkit-touch-callout: none;
-    }
-
-    .control-mode-option.active {
-      color: #11182d;
-      background: #7af7ff;
-      border-color: #ffffff;
-    }
-
     .fullscreen-toggle {
       display: none;
       position: absolute;
@@ -199,7 +157,7 @@
       -webkit-touch-callout: none;
     }
 
-    .game-wrap[data-control-mode="touch"] .fullscreen-toggle {
+    .game-wrap[data-touch-device="true"] .fullscreen-toggle {
       display: block;
     }
 
@@ -319,23 +277,13 @@
         bottom: max(14px, env(safe-area-inset-bottom));
       }
 
-      .control-mode-panel {
-        top: max(12px, env(safe-area-inset-top));
-        bottom: auto;
-        transform: translateX(-50%);
-      }
     }
   </style>
 </head>
 <body>
 
-<div class="game-wrap" data-control-mode="keyboard" data-intro="true">
+<div class="game-wrap" data-touch-controls="false" data-touch-device="false" data-intro="true">
   <canvas id="game" width="640" height="360"></canvas>
-  <div class="control-mode-panel" aria-label="选择控制方式">
-    <span>控制方式</span>
-    <button class="control-mode-option" data-mode="touch" type="button">触屏</button>
-    <button class="control-mode-option" data-mode="keyboard" type="button">键盘</button>
-  </div>
   <button class="fullscreen-toggle" id="fullscreenToggle" type="button">全屏</button>
   <div class="touch-controls" aria-label="触摸控制">
     <div class="touch-joystick" id="touchJoystick" aria-label="移动摇杆">
@@ -380,7 +328,8 @@ let mapCacheTheme = null;
 const keys = {};
 const virtualMove = { x: 0, y: 0 };
 const rand = seededRandom(2026);
-let controlMode = window.matchMedia("(pointer: coarse)").matches ? "touch" : "keyboard";
+const hasTouchInput = navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
+let touchControlsVisible = hasTouchInput;
 
 let message = "欢迎来到《道道大冒险》！准备启程。";
 let messageTimer = 240;
@@ -427,6 +376,7 @@ const npcName = "诺诺";
 document.addEventListener("keydown", e => {
   keys[e.code] = true;
   unlockAudioContext();
+  setTouchControlsVisible(false);
 
   if (finalEnding.active && e.code === "KeyR") {
     returnToIntroAfterFinal();
@@ -458,12 +408,6 @@ document.addEventListener("keydown", e => {
       return;
     }
 
-    if (e.code === "ArrowUp" || e.code === "ArrowDown" || e.code === "KeyW" || e.code === "KeyS") {
-      setControlMode(controlMode === "touch" ? "keyboard" : "touch");
-      playSound("step");
-      e.preventDefault();
-      return;
-    }
   }
 
   if (intro.active && e.code === "Space") {
@@ -483,16 +427,16 @@ document.addEventListener("keyup", e => {
 
 document.addEventListener("pointerdown", unlockAudioContext, { once: true });
 setupViewportHeight();
-setupControlModeChooser();
 setupFullscreenToggle();
 setupTouchControls();
 setupTouchBrowserGuards();
-updateControlModeUI();
+setupAutoTouchControls();
+updateInputModeUI();
 
 function startSelectedLevel() {
   intro.active = false;
-  updateControlModeUI();
-  if (controlMode === "touch") requestGameFullscreen();
+  updateInputModeUI();
+  if (touchControlsVisible) requestGameFullscreen();
   level = selectedStartLevel;
   totalKilled = 0;
   resetCurrentLevelState();
@@ -500,32 +444,30 @@ function startSelectedLevel() {
   playSound("portal");
 }
 
-function setupControlModeChooser() {
-  document.querySelectorAll(".control-mode-option").forEach(button => {
-    button.addEventListener("pointerdown", e => {
-      e.preventDefault();
-      unlockAudioContext();
-      setControlMode(button.dataset.mode);
-    });
-  });
+function setTouchControlsVisible(visible) {
+  if (!hasTouchInput) visible = false;
+  if (touchControlsVisible === visible) return;
+  touchControlsVisible = visible;
+  if (!visible) releaseTouchInput();
+  updateInputModeUI();
 }
 
-function setControlMode(mode) {
-  if (mode !== "touch" && mode !== "keyboard") return;
-  controlMode = mode;
-  releaseTouchInput();
-  updateControlModeUI();
-}
-
-function updateControlModeUI() {
+function updateInputModeUI() {
   if (!gameWrap) return;
-  gameWrap.dataset.controlMode = controlMode;
+  gameWrap.dataset.touchControls = touchControlsVisible ? "true" : "false";
+  gameWrap.dataset.touchDevice = hasTouchInput ? "true" : "false";
   gameWrap.dataset.intro = intro.active ? "true" : "false";
   gameWrap.dataset.fullscreenSupported = hasFullscreenSupport() ? "true" : "false";
   updateFullscreenUI();
+}
 
-  document.querySelectorAll(".control-mode-option").forEach(button => {
-    button.classList.toggle("active", button.dataset.mode === controlMode);
+function setupAutoTouchControls() {
+  if (!gameWrap || !hasTouchInput) return;
+
+  gameWrap.addEventListener("pointerdown", e => {
+    if (e.pointerType === "touch" && !e.target.closest(".fullscreen-toggle")) {
+      setTouchControlsVisible(true);
+    }
   });
 }
 
@@ -648,7 +590,7 @@ function setupTouchControls() {
   };
 
   joystick.addEventListener("pointerdown", e => {
-    if (controlMode !== "touch") return;
+    if (!touchControlsVisible) return;
     e.preventDefault();
     unlockAudioContext();
     joystickPointerId = e.pointerId;
@@ -657,7 +599,7 @@ function setupTouchControls() {
   });
 
   joystick.addEventListener("pointermove", e => {
-    if (controlMode !== "touch") return;
+    if (!touchControlsVisible) return;
     if (e.pointerId !== joystickPointerId) return;
     e.preventDefault();
     updateJoystick(e);
@@ -675,7 +617,7 @@ function setupTouchControls() {
     const key = button.dataset.key;
 
     button.addEventListener("pointerdown", e => {
-      if (controlMode !== "touch") return;
+      if (!touchControlsVisible) return;
       e.preventDefault();
       unlockAudioContext();
 
@@ -1726,12 +1668,12 @@ function drawIntroScreen() {
   if (Math.sin(intro.blink / 8) > -0.15) {
     ctx.fillStyle = "#ffe27a";
     ctx.font = "16px monospace";
-    const startHint = controlMode === "touch" ? "点 攻击 / 交互 开始冒险" : "按 空格键 开始冒险";
+    const startHint = touchControlsVisible ? "点 攻击 / 交互 开始冒险" : "按 空格键 开始冒险";
     ctx.fillText(startHint, W / 2 - ctx.measureText(startHint).width / 2, 340);
   }
 
   const chooseText = `选择起始关卡：< ${selectedStartLevel} >`;
-  const chooseHint = "← / → 切换关卡，↑ / ↓ 切换控制方式";
+  const chooseHint = "← / → 切换关卡";
   ctx.fillStyle = "#d8e6ff";
   ctx.font = "12px monospace";
   ctx.fillText(chooseText, W / 2 - ctx.measureText(chooseText).width / 2, 290);
@@ -2542,7 +2484,7 @@ function returnToIntroAfterFinal() {
   totalKilled = 0;
   resetCurrentLevelState();
   keys.KeyR = false;
-  updateControlModeUI();
+  updateInputModeUI();
   showMessage("已回到片头。再次开始时默认拥有追踪散射魔法！");
   playSound("portal");
 }
