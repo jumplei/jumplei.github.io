@@ -137,73 +137,6 @@
       border-color: rgba(255, 255, 255, 0.75);
     }
 
-    .fullscreen-toggle {
-      display: none;
-      position: absolute;
-      right: max(10px, env(safe-area-inset-right));
-      top: max(10px, env(safe-area-inset-top));
-      z-index: 3;
-      border: 1px solid rgba(255, 255, 255, 0.42);
-      border-radius: 999px;
-      padding: 7px 12px;
-      color: #ffffff;
-      background: rgba(8, 12, 28, 0.72);
-      font: 700 12px "Microsoft YaHei", Arial, sans-serif;
-      text-shadow: 0 1px 2px #000;
-      pointer-events: auto;
-      touch-action: none;
-      user-select: none;
-      -webkit-user-select: none;
-      -webkit-touch-callout: none;
-    }
-
-    .game-wrap[data-touch-device="true"] .fullscreen-toggle {
-      display: block;
-    }
-
-    .game-wrap[data-fullscreen-supported="false"] .fullscreen-toggle {
-      display: none;
-    }
-
-    .game-wrap:fullscreen,
-    .game-wrap:-webkit-full-screen {
-      width: 100vw;
-      height: var(--app-height);
-      max-width: none;
-      border: 0;
-      border-radius: 0;
-      background: #050713;
-      box-shadow: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-
-    .game-wrap:fullscreen canvas,
-    .game-wrap:-webkit-full-screen canvas {
-      width: 100vw;
-      height: var(--app-height);
-      object-fit: fill;
-    }
-
-    .game-wrap:fullscreen .tips,
-    .game-wrap:-webkit-full-screen .tips {
-      display: none;
-    }
-
-    .game-wrap:fullscreen .touch-joystick,
-    .game-wrap:-webkit-full-screen .touch-joystick {
-      left: max(18px, env(safe-area-inset-left));
-      bottom: max(22px, env(safe-area-inset-bottom));
-    }
-
-    .game-wrap:fullscreen .touch-buttons,
-    .game-wrap:-webkit-full-screen .touch-buttons {
-      right: max(18px, env(safe-area-inset-right));
-      bottom: max(20px, env(safe-area-inset-bottom));
-    }
-
     .tips {
       padding: 10px 14px;
       font-size: 13px;
@@ -284,7 +217,6 @@
 
 <div class="game-wrap" data-touch-controls="false" data-touch-device="false" data-intro="true">
   <canvas id="game" width="640" height="360"></canvas>
-  <button class="fullscreen-toggle" id="fullscreenToggle" type="button">全屏</button>
   <div class="touch-controls" aria-label="触摸控制">
     <div class="touch-joystick" id="touchJoystick" aria-label="移动摇杆">
       <div class="touch-stick" id="touchStick"></div>
@@ -305,7 +237,6 @@
 <script>
 const canvas = document.getElementById("game");
 const gameWrap = document.querySelector(".game-wrap");
-const fullscreenToggle = document.getElementById("fullscreenToggle");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 
@@ -427,7 +358,6 @@ document.addEventListener("keyup", e => {
 
 document.addEventListener("pointerdown", unlockAudioContext, { once: true });
 setupViewportHeight();
-setupFullscreenToggle();
 setupTouchControls();
 setupTouchBrowserGuards();
 setupAutoTouchControls();
@@ -436,7 +366,6 @@ updateInputModeUI();
 function startSelectedLevel() {
   intro.active = false;
   updateInputModeUI();
-  if (touchControlsVisible) requestGameFullscreen();
   level = selectedStartLevel;
   totalKilled = 0;
   resetCurrentLevelState();
@@ -457,15 +386,13 @@ function updateInputModeUI() {
   gameWrap.dataset.touchControls = touchControlsVisible ? "true" : "false";
   gameWrap.dataset.touchDevice = hasTouchInput ? "true" : "false";
   gameWrap.dataset.intro = intro.active ? "true" : "false";
-  gameWrap.dataset.fullscreenSupported = hasFullscreenSupport() ? "true" : "false";
-  updateFullscreenUI();
 }
 
 function setupAutoTouchControls() {
   if (!gameWrap || !hasTouchInput) return;
 
   gameWrap.addEventListener("pointerdown", e => {
-    if (e.pointerType === "touch" && !e.target.closest(".fullscreen-toggle")) {
+    if (e.pointerType === "touch") {
       setTouchControlsVisible(true);
     }
   });
@@ -480,63 +407,6 @@ function setupViewportHeight() {
   window.addEventListener("resize", updateAppHeight);
   window.addEventListener("orientationchange", () => setTimeout(updateAppHeight, 250));
   window.addEventListener("pageshow", updateAppHeight);
-}
-
-function setupFullscreenToggle() {
-  if (!fullscreenToggle) return;
-
-  fullscreenToggle.addEventListener("pointerdown", e => {
-    e.preventDefault();
-    unlockAudioContext();
-
-    if (isGameFullscreen()) {
-      exitGameFullscreen();
-    } else {
-      requestGameFullscreen();
-    }
-  });
-
-  document.addEventListener("fullscreenchange", updateFullscreenUI);
-  document.addEventListener("webkitfullscreenchange", updateFullscreenUI);
-}
-
-function hasFullscreenSupport() {
-  return !!(gameWrap && (gameWrap.requestFullscreen || gameWrap.webkitRequestFullscreen));
-}
-
-function isGameFullscreen() {
-  return document.fullscreenElement === gameWrap || document.webkitFullscreenElement === gameWrap;
-}
-
-function requestGameFullscreen() {
-  if (!gameWrap || isGameFullscreen()) return;
-
-  const request = gameWrap.requestFullscreen || gameWrap.webkitRequestFullscreen;
-  if (!request) return;
-
-  const result = request.call(gameWrap);
-  if (result && typeof result.catch === "function") {
-    result.catch(() => {
-      showMessage("浏览器阻止了自动全屏，请点右上角“全屏”按钮。 ");
-    });
-  }
-
-  if (screen.orientation && screen.orientation.lock) {
-    const lockResult = screen.orientation.lock("landscape");
-    if (lockResult && typeof lockResult.catch === "function") {
-      lockResult.catch(() => {});
-    }
-  }
-}
-
-function exitGameFullscreen() {
-  const exit = document.exitFullscreen || document.webkitExitFullscreen;
-  if (exit) exit.call(document);
-}
-
-function updateFullscreenUI() {
-  if (!fullscreenToggle) return;
-  fullscreenToggle.textContent = isGameFullscreen() ? "退出全屏" : "全屏";
 }
 
 function releaseTouchInput() {
