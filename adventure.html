@@ -889,7 +889,7 @@ function swordAttack() {
   const cy = player.y + player.h / 2;
   const angle = getFacingAngle(player.facing);
   const reach = getAttackReach();
-  const arcAngle = 0.82;
+  const arcAngle = getAttackArcAngle();
 
   slashEffects.push({
     cx,
@@ -897,8 +897,8 @@ function swordAttack() {
     angle,
     reach,
     arcAngle,
-    life: 10,
-    maxLife: 10
+    life: 12,
+    maxLife: 12
   });
 
   enemies.forEach(e => {
@@ -2014,9 +2014,14 @@ function drawSlashEffects() {
   slashEffects.forEach(s => {
     const x = Math.floor(s.cx - camera.x);
     const y = Math.floor(s.cy - camera.y);
-    const alpha = s.life / s.maxLife;
-    const start = s.angle - s.arcAngle;
-    const end = s.angle + s.arcAngle;
+    const t = 1 - s.life / s.maxLife;
+    const ease = 1 - Math.pow(1 - t, 3);
+    const alpha = Math.sin(t * Math.PI);
+    const swingOffset = -0.34 + ease * 0.68;
+    const radius = s.reach * (0.58 + ease * 0.42);
+    const arc = s.arcAngle * (0.55 + ease * 0.45);
+    const start = s.angle + swingOffset - arc;
+    const end = s.angle + swingOffset + arc;
 
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -2025,17 +2030,17 @@ function drawSlashEffects() {
     ctx.shadowBlur = 8;
 
     ctx.strokeStyle = "#fff7a8";
-    ctx.lineWidth = 9;
+    ctx.lineWidth = 7;
     ctx.beginPath();
-    ctx.arc(x, y, s.reach, start, end);
+    ctx.arc(x, y, radius, start, end);
     ctx.stroke();
 
     ctx.shadowBlur = 0;
     ctx.globalAlpha = alpha * 0.9;
     ctx.strokeStyle = "#7af7ff";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y, Math.max(8, s.reach - 5), start + 0.1, end - 0.1);
+    ctx.arc(x, y, Math.max(8, radius - 4), start + 0.08, end - 0.08);
     ctx.stroke();
 
     ctx.restore();
@@ -2502,9 +2507,15 @@ function getAttackCooldown() {
 }
 
 function getAttackReach() {
-  const startReach = 24;
-  const maxReach = 74;
-  return maxReach - (maxReach - startReach) * Math.exp(-totalKilled / 20);
+  const startReach = 18;
+  const maxReach = 58;
+  return maxReach - (maxReach - startReach) * Math.exp(-totalKilled / 24);
+}
+
+function getAttackArcAngle() {
+  const startArc = 0.48;
+  const maxArc = 0.72;
+  return maxArc - (maxArc - startArc) * Math.exp(-totalKilled / 28);
 }
 
 function unlockAudioContext() {
