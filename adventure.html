@@ -838,7 +838,7 @@ function updatePlayer(dt) {
 
   if ((keys.Space || keys.KeyJ) && player.attackCd <= 0) {
     swordAttack();
-    // 初始较慢，随累计击败数平滑加快
+    // 初始较慢，随累计击败数平滑加快；剑气距离也会同步成长
     player.attackCd = getAttackCooldown();
   }
 
@@ -885,46 +885,51 @@ function moveEntity(ent, dx, dy) {
 function swordAttack() {
   playSound("slash");
 
-  let sx = player.x;
-  let sy = player.y;
-  let sw = 18;
-  let sh = 18;
-
-  if (player.facing === "up") {
-    sx = player.x - 3;
-    sy = player.y - 16;
-    sw = 18;
-    sh = 16;
-  } else if (player.facing === "down") {
-    sx = player.x - 3;
-    sy = player.y + 12;
-    sw = 18;
-    sh = 16;
-  } else if (player.facing === "left") {
-    sx = player.x - 16;
-    sy = player.y - 2;
-    sw = 16;
-    sh = 18;
-  } else if (player.facing === "right") {
-    sx = player.x + 12;
-    sy = player.y - 2;
-    sw = 16;
-    sh = 18;
-  }
+  const cx = player.x + player.w / 2;
+  const cy = player.y + player.h / 2;
+  const angle = getFacingAngle(player.facing);
+  const reach = getAttackReach();
+  const arcAngle = 0.82;
 
   slashEffects.push({
-    x: sx,
-    y: sy,
-    w: sw,
-    h: sh,
-    life: 10
+    cx,
+    cy,
+    angle,
+    reach,
+    arcAngle,
+    life: 10,
+    maxLife: 10
   });
 
   enemies.forEach(e => {
-    if (e.alive && rectsOverlap({ x: sx, y: sy, w: sw, h: sh }, e)) {
+    if (e.alive && isEnemyInSwordArc(e, cx, cy, angle, reach, arcAngle)) {
       damageEnemy(e, 18);
     }
   });
+}
+
+function getFacingAngle(facing) {
+  if (facing === "right") return 0;
+  if (facing === "down") return Math.PI / 2;
+  if (facing === "left") return Math.PI;
+  return -Math.PI / 2;
+}
+
+function isEnemyInSwordArc(e, cx, cy, angle, reach, arcAngle) {
+  const ex = e.x + e.w / 2;
+  const ey = e.y + e.h / 2;
+  const dx = ex - cx;
+  const dy = ey - cy;
+  const dist = Math.hypot(dx, dy);
+  const enemyRadius = Math.hypot(e.w, e.h) / 2;
+  if (dist > reach + enemyRadius || dist < 4) return false;
+
+  const diff = Math.abs(angleDifference(Math.atan2(dy, dx), angle));
+  return diff <= arcAngle + enemyRadius / Math.max(18, reach);
+}
+
+function angleDifference(a, b) {
+  return Math.atan2(Math.sin(a - b), Math.cos(a - b));
 }
 
 function castMagic() {
@@ -2007,13 +2012,33 @@ function drawProjectiles() {
 
 function drawSlashEffects() {
   slashEffects.forEach(s => {
-    const x = Math.floor(s.x - camera.x);
-    const y = Math.floor(s.y - camera.y);
+    const x = Math.floor(s.cx - camera.x);
+    const y = Math.floor(s.cy - camera.y);
+    const alpha = s.life / s.maxLife;
+    const start = s.angle - s.arcAngle;
+    const end = s.angle + s.arcAngle;
 
-    ctx.globalAlpha = s.life / 10;
-    ctx.fillStyle = "#fff7a8";
-    ctx.fillRect(x, y, s.w, s.h);
-    ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.lineCap = "round";
+    ctx.shadowColor = "rgba(255, 247, 168, 0.55)";
+    ctx.shadowBlur = 8;
+
+    ctx.strokeStyle = "#fff7a8";
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.arc(x, y, s.reach, start, end);
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.strokeStyle = "#7af7ff";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(8, s.reach - 5), start + 0.1, end - 0.1);
+    ctx.stroke();
+
+    ctx.restore();
   });
 }
 
@@ -2474,6 +2499,12 @@ function getAttackCooldown() {
   const minCd = 6;
   // 指数衰减：前期变化明显，后期趋于平滑
   return minCd + (startCd - minCd) * Math.exp(-totalKilled / 18);
+}
+
+function getAttackReach() {
+  const startReach = 24;
+  const maxReach = 74;
+  return maxReach - (maxReach - startReach) * Math.exp(-totalKilled / 20);
 }
 
 function unlockAudioContext() {
