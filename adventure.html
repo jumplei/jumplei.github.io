@@ -2017,7 +2017,7 @@ function drawSlashEffects() {
     const t = 1 - s.life / s.maxLife;
     const ease = 1 - Math.pow(1 - t, 3);
     const alpha = Math.sin(t * Math.PI);
-    const swingOffset = -0.34 + ease * 0.68;
+    const swingOffset = (t - 0.5) * 0.5;
     const radius = s.reach * (0.58 + ease * 0.42);
     const arc = s.arcAngle * (0.55 + ease * 0.45);
     const start = s.angle + swingOffset - arc;
