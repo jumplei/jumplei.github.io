@@ -58,13 +58,21 @@ html, body {
   background: #000;
 }
 
+/* Static artwork goes straight from its native 880×495 pixels to the display.
+   Do not downsample it through the 800×450 moving-art canvas first. */
+#room-scenery { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+#room-scenery[hidden] { display: none; }
+#room-scenery img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 #game {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 800px;
   height: 450px;
   image-rendering: pixelated;
   background: #000;
 }
+#game.native-scenery { background: transparent; }
 
 /* Header follows the approved concept; independent of legacy chips/buttons. */
 #hud { position: absolute; inset: 0 0 auto; pointer-events: none; z-index: 9; image-rendering: auto; }

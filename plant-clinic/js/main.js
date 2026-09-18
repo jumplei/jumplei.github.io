@@ -25,6 +25,12 @@ var PPC = PPC || {};
     canvas.style.width = (800 * scale) + "px";
     canvas.style.height = (450 * scale) + "px";
     canvas.style.marginTop = headerSpace + "px";
+    // The native scenery must match the actual canvas rectangle, including the
+    // phone header strip. Gameplay retains its original 400×225 coordinates.
+    var scenery = document.getElementById("room-scenery");
+    scenery.style.width = canvas.style.width;
+    scenery.style.height = canvas.style.height;
+    scenery.style.top = canvas.style.marginTop;
     wrap.style.width = (800 * scale) + "px";
     wrap.style.height = (450 * scale + headerSpace + patientSpace + dockSpace) + "px";
     wrap.classList.toggle("has-patient-strip", patientSpace > 0);
@@ -62,6 +68,7 @@ var PPC = PPC || {};
   });
 
   function loop() {
+    if (PPC.Opening.isActive()) { requestAnimationFrame(loop); return; }
     var s = PPC.Game.getState();
     // Zoom/case changes can alter the phone's reserved UI strips without a
     // browser resize event. Keep pointer geometry and visible foliage in sync.
@@ -79,6 +86,6 @@ var PPC = PPC || {};
 
   window.addEventListener("resize", resize);
   resize();
-  PPC.UI.menu();
+  PPC.Opening.show();
   requestAnimationFrame(loop);
 })();

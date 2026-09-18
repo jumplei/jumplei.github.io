@@ -23,6 +23,15 @@ PPC.Render = (function () {
   if (roomArt) roomArt.src = "assets/clinic-room.png";
   if (benchArt) benchArt.src = "assets/clinic-workbench.png";
   function artReady() { return roomArt && benchArt && roomArt.complete && benchArt.complete && roomArt.naturalWidth && benchArt.naturalWidth; }
+  var scenery = document.getElementById("room-scenery");
+  var nativeScenery = false;
+  if (scenery && scenery.appendChild && roomArt && benchArt) {
+    [roomArt, benchArt].forEach(function (image) {
+      image.alt = "";
+      image.draggable = false;
+      scenery.appendChild(image);
+    });
+  } else { scenery = null; }
 
   function rect(x, y, w, h, color) {
     ctx.fillStyle = color;
@@ -93,7 +102,7 @@ PPC.Render = (function () {
 
   function drawRoom() {
     if (artReady()) {
-      ctx.drawImage(roomArt, 0, 0, W, H);
+      if (!nativeScenery) ctx.drawImage(roomArt, 0, 0, W, H);
       drawSign();
       return;
     }
@@ -166,7 +175,15 @@ PPC.Render = (function () {
 
   function drawCounter() {
     if (artReady()) {
-      ctx.drawImage(benchArt, 0, 0, W, H);
+      if (nativeScenery) {
+        // Preserve the original depth ordering: the desk masks an owner drawn
+        // behind it, but never paints resampled desk colors onto this canvas.
+        // Plants/entering owners drawn afterward remain in front as before.
+        ctx.save();
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.drawImage(benchArt, 0, 0, W, H);
+        ctx.restore();
+      } else { ctx.drawImage(benchArt, 0, 0, W, H); }
       return;
     }
     rect(12, 145, W - 24, 43, "#895036");
@@ -1004,6 +1021,14 @@ PPC.Render = (function () {
 
   function draw(phase, caseData, inspected, flipped, hoverId, anim, zoomed) {
     mode = zoomed ? "zoom" : "normal";
+    nativeScenery = !!(scenery && artReady() && !zoomed);
+    if (scenery) {
+      scenery.hidden = !nativeScenery;
+      canvas.classList.toggle("native-scenery", nativeScenery);
+    }
+    // The moving-art canvas is transparent over native scenery, so every frame
+    // must clear old foliage, owners and zoom pixels rather than painting a room.
+    ctx.clearRect(0, 0, W, H);
     if (anim && anim.t < 1) { drawEntering(anim.t, caseData); return; }
     if (zoomed && caseData) { drawZoomedPlant(caseData, inspected, flipped, hoverId); return; }
     if (!caseData) { drawRoom(); drawCounter(); drawCustomerAt(24, 200); return; }

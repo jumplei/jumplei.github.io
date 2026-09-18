@@ -22,6 +22,7 @@ PPC.UI = (function () {
   }
 
   function clear() {
+    if (PPC.Opening) PPC.Opening.dismiss();
     var focusTarget = returnFocus;
     // Specimen studies live on the full stage, outside the clipped room canvas.
     if (activeDialog && activeDialog.parentNode !== layer && activeDialog.parentNode) activeDialog.parentNode.removeChild(activeDialog);
@@ -38,6 +39,7 @@ PPC.UI = (function () {
   }
 
   function clearAll() {
+    if (PPC.Opening) PPC.Opening.dismiss();
     if (activeDialog && activeDialog.parentNode !== layer && activeDialog.parentNode) activeDialog.parentNode.removeChild(activeDialog);
     layer.innerHTML = "";
     activeDialog = null;

@@ -39,3 +39,4 @@ venv/
 
 # Local project data
 tests/
+tools/

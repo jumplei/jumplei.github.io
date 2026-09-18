@@ -1,0 +1,169 @@
+/* Startup prologue only. No selectors here change the patient menu. */
+.clinic-opening {
+  position: fixed; inset: 0; z-index: 100;
+  overflow: hidden; isolation: isolate;
+  color: #f6edce; background: #344f42;
+  font-family: Georgia, "Times New Roman", serif;
+  transition: opacity 200ms ease;
+}
+.clinic-opening[data-departing="true"] { opacity: 0; }
+.opening-room {
+  position: absolute; left: 50%; top: 50%;
+  width: max(100vw, 177.778dvh); height: max(100dvh, 56.25vw);
+  transform: translate(-50%, -50%);
+  background: linear-gradient(#b9b990 60%, #93744f 60%);
+}
+.opening-room-art { position: absolute; inset: 0; display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.opening-room-art[hidden] { display: none; }
+.opening-shade {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 40%, rgba(20,43,33,.5), rgba(20,35,28,.22) 60%, rgba(13,29,22,.65));
+  transition: opacity 1000ms ease;
+}
+.clinic-opening[data-phase="opening"] .opening-shade { opacity: .2; }
+.opening-morning-light {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(125deg, rgba(255,224,148,.18), transparent 48%);
+  animation: opening-daylight 9s ease-in-out infinite alternate;
+}
+@keyframes opening-daylight { from { opacity: .45; } to { opacity: .85; } }
+.opening-hero {
+  position: absolute; left: 50%; top: 40%; width: min(760px, calc(100% - 40px));
+  transform: translate(-50%, -50%); text-align: center;
+  text-shadow: 0 2px 14px rgba(24,42,31,.65);
+  transition: opacity 240ms ease, margin-top 300ms ease;
+}
+.clinic-opening[data-phase="opening"] .opening-hero { opacity: 0; margin-top: -10px; pointer-events: none; }
+.opening-crest { font-size: 36px; line-height: 1; color: #e5d5a6; margin-bottom: 12px; }
+.opening-kicker { font: 10px/1.5 "Courier New", monospace; letter-spacing: 2.8px; margin-bottom: 20px; }
+.opening-title { color: #fff2d0; font-size: clamp(48px, 6vw, 88px); font-weight: normal; line-height: .97; letter-spacing: -2px; margin: 0; }
+.opening-title span { display: block; }
+.opening-credit { font: 11px/1.5 "Courier New", monospace; letter-spacing: 3.5px; margin-top: 21px; }
+.opening-tagline { font-size: clamp(16px, 1.6vw, 22px); line-height: 1.45; font-style: italic; margin: 24px 0 29px; }
+.opening-open, .opening-skip {
+  font: 600 12px/1.3 "Trebuchet MS", Arial, sans-serif;
+  cursor: pointer; border-radius: 2px;
+}
+.opening-open {
+  min-width: 244px; min-height: 56px; padding: 17px 30px;
+  border: 1px solid #e6d9ae; outline-offset: 5px; letter-spacing: 2px;
+  color: #f7edce; background: #345744;
+  box-shadow: 0 3px 0 #263e31, 0 9px 24px rgba(13,29,22,.2);
+  transition: background 160ms ease, transform 160ms ease;
+}
+.opening-open:hover { background: #426a52; transform: translateY(-2px); }
+.opening-open:active { transform: translateY(1px); }
+.opening-open:focus-visible, .opening-skip:focus-visible { outline: 2px solid #fff2cd; outline-offset: 5px; }
+.opening-key-hint { margin-top: 15px; font: 10px/1.4 "Courier New", monospace; color: #e1dac0; letter-spacing: .5px; }
+.opening-footer {
+  position: absolute; bottom: max(26px, env(safe-area-inset-bottom)); left: 32px; right: 32px;
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  min-height: 44px; text-shadow: 0 1px 6px #1c3025;
+}
+.opening-footer-note { font: 10px/1.5 "Courier New", monospace; letter-spacing: 2px; }
+.opening-status { font-size: 17px; line-height: 1.4; }
+.opening-status:empty { display: none; }
+.clinic-opening[data-phase="opening"] .opening-footer-note { display: none; }
+.opening-skip { color: #fff1cf; background: rgba(37,62,47,.9); border: 1px solid #c6c7a4; min-height: 44px; padding: 11px 18px; white-space: nowrap; }
+.opening-skip[hidden] { display: none; }
+.opening-skip:hover { background: #46674e; }
+
+/* The hanging sign is foreground set dressing, not a new menu/control. */
+.opening-door-sign {
+  /* Midpoint of shelf edge x=662 and hanging foliage x=773 in the 880px art.
+     Follow the room's cover scale, not an arbitrary viewport right margin. */
+  position: absolute; left: calc(50% + max(31.5341vw, 56.0606dvh)); right: auto; top: 17%;
+  transform: translateX(-50%);
+  width: clamp(110px, 8.64vw, 152px); aspect-ratio: 152 / 92; height: auto;
+  perspective: 650px; filter: drop-shadow(3px 5px 2px rgba(35,39,24,.3));
+}
+.opening-door-sign::before, .opening-door-sign::after {
+  content: ""; position: absolute; width: 1px; height: 64px; background: #a6a27a; top: -62px;
+}
+.opening-door-sign::before { left: 23%; transform: rotate(19deg); transform-origin: bottom; }
+.opening-door-sign::after { right: 23%; transform: rotate(-19deg); transform-origin: bottom; }
+.opening-sign-flipper { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 680ms cubic-bezier(.3,.05,.2,1); }
+.clinic-opening[data-phase="opening"] .opening-sign-flipper { transform: rotateX(180deg); }
+.opening-sign-face {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 7px;
+  border: 4px solid #b49a64; outline: 1px solid #3c5138;
+  box-shadow: inset 0 0 0 1px #c9bc8b; background: #3a5744;
+  backface-visibility: hidden;
+}
+.opening-sign-face strong { font-size: clamp(20px, 1.48vw, 26px); line-height: 1; font-weight: normal; letter-spacing: 3px; }
+.opening-sign-small { font: 7px/1.2 "Courier New", monospace; letter-spacing: .8px; }
+.opening-sign-open { transform: rotateX(180deg); background: #496546; }
+
+/* Light follows the existing lamp's shade and the bare examination mat. */
+.opening-lamp-glow {
+  position: absolute; left: 50%; top: 47%; width: 12%; height: 18.5%;
+  clip-path: polygon(70% 0, 92% 8%, 100% 100%, 0 100%);
+  background: linear-gradient(175deg, rgba(255,241,159,.65), rgba(255,229,143,.08));
+  opacity: 0; transition: opacity 450ms ease;
+}
+.opening-lamp-pool { position: absolute; left: 49%; top: 63.8%; width: 14%; height: 2.5%; border-radius: 50%; background: #ffe39a; filter: blur(6px); opacity: 0; transition: opacity 450ms ease; }
+.clinic-opening[data-beat="lamp"] .opening-lamp-glow,
+.clinic-opening[data-beat="book"] .opening-lamp-glow { opacity: 1; }
+.clinic-opening[data-beat="lamp"] .opening-lamp-pool,
+.clinic-opening[data-beat="book"] .opening-lamp-pool { opacity: .38; }
+
+.opening-ledger {
+  /* The spread has TWO portrait pages; each page mirrors the tall menu sheet.
+     Keep the view shallow enough that perspective cannot flatten it to landscape. */
+  position: absolute; left: 48.5%; top: 58%; width: clamp(176px, 12%, 224px); aspect-ratio: 1.3; height: auto;
+  transform: translate(-50%, -50%) rotateX(18deg); transform-style: preserve-3d;
+  perspective: 850px; transition: transform 700ms ease;
+  filter: drop-shadow(0 7px 2px rgba(66,46,25,.35));
+}
+.ledger-page { position: absolute; width: 50%; top: 0; bottom: 0; padding: 13px 10px; background: #f0e6c9; border: 2px solid #947646; color: #40563e; }
+.ledger-left { left: 0; opacity: 0; border-right: 1px solid #bdb18c; transition: opacity 160ms ease 90ms; text-align: center; }
+.ledger-right { right: 0; border-left: 1px solid #bdb18c; }
+.ledger-leaf { font-size: 29px; }
+.ledger-page-kicker { display: block; font: 6px/1.3 "Courier New", monospace; letter-spacing: 1px; margin-bottom: 7px; }
+.ledger-page-title { display: block; font: normal 14px/1.15 Georgia, serif; }
+.ledger-rule { display: block; height: 1px; margin: 10px 0 0; background: #b8b698; }
+.ledger-rule-short { width: 70%; margin-top: 6px; }
+.ledger-cover { position: absolute; right: 0; top: 0; width: 50%; height: 100%; transform-origin: left center; transform-style: preserve-3d; transition: transform 750ms cubic-bezier(.25,.1,.25,1); }
+.ledger-cover-front, .ledger-cover-back { position: absolute; inset: 0; backface-visibility: hidden; border: 3px solid #344d3a; box-shadow: inset 0 0 0 1px #9c9865; background: #486348; }
+.ledger-cover-front { display: flex; align-items: center; justify-content: center; text-align: center; white-space: pre-line; font: 10px/1.6 "Courier New", monospace; letter-spacing: 1px; color: #e2d6a3; }
+.ledger-cover-back { transform: rotateY(180deg); background: #e9ddbb; box-shadow: inset 0 0 0 1px #b9ad87; }
+.clinic-opening[data-beat="book"] .opening-ledger { transform: translate(-50%, -50%) rotateX(8deg) scale(1.15); }
+.clinic-opening[data-beat="book"] .ledger-left { opacity: 1; }
+.clinic-opening[data-beat="book"] .ledger-cover { transform: rotateY(-179deg); }
+
+/* With a portrait crop the hanging planter is off-screen; keep the sign visible. */
+@media (min-width: 641px) and (max-aspect-ratio: 4/3) {
+  .opening-door-sign { left: auto; right: 6%; top: 12%; transform: none; }
+}
+@media (max-width: 640px) {
+  .opening-hero { top: 43%; width: calc(100% - 36px); }
+  .opening-key-hint { display: none; }
+  .opening-title { font-size: clamp(46px, 13vw, 70px); }
+  .opening-kicker { font-size: 8px; letter-spacing: 1.5px; margin-bottom: 16px; }
+  .opening-credit { font-size: 10px; margin-top: 17px; }
+  .opening-tagline { max-width: 290px; margin: 22px auto; }
+  .opening-door-sign { top: 34px; left: auto; right: 25px; transform: none; width: 106px; height: 67px; }
+  .opening-sign-face { border-width: 3px; gap: 5px; }
+  .opening-sign-face strong { font-size: 20px; }
+  .opening-sign-small { font-size: 5px; }
+  .opening-footer { bottom: max(20px, env(safe-area-inset-bottom)); left: 20px; right: 20px; flex-wrap: wrap; gap: 12px; }
+  .opening-status { flex: 1 1 100%; font-size: 16px; }
+  .opening-skip { margin-left: auto; }
+  .opening-footer-note { font-size: 9px; }
+}
+@media (max-height: 560px) {
+  .opening-hero { top: 44%; }
+  .opening-crest, .opening-kicker, .opening-key-hint { display: none; }
+  .opening-title { font-size: clamp(36px, 8dvh, 50px); letter-spacing: -1px; }
+  .opening-credit { margin-top: 12px; font-size: 9px; }
+  .opening-tagline { margin: 13px 0 16px; font-size: 16px; }
+  .opening-open { min-height: 46px; padding: 12px 20px; }
+  .opening-door-sign { top: 40px; width: 90px; height: 60px; }
+  .opening-sign-face strong { font-size: 17px; }
+  .opening-footer { bottom: 12px; left: 20px; right: 20px; }
+  .opening-footer-note { font-size: 8px; }
+  .opening-status { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .clinic-opening, .clinic-opening *, .clinic-opening *::before, .clinic-opening *::after { animation: none !important; transition: none !important; }
+}
