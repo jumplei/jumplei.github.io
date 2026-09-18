@@ -23,6 +23,7 @@ PPC.UI = (function () {
 
   function clear() {
     if (PPC.Opening) PPC.Opening.dismiss();
+    if (document.documentElement) document.documentElement.classList.remove("dialog-open");
     var focusTarget = returnFocus;
     // Specimen studies live on the full stage, outside the clipped room canvas.
     if (activeDialog && activeDialog.parentNode !== layer && activeDialog.parentNode) activeDialog.parentNode.removeChild(activeDialog);
@@ -40,6 +41,7 @@ PPC.UI = (function () {
 
   function clearAll() {
     if (PPC.Opening) PPC.Opening.dismiss();
+    if (document.documentElement) document.documentElement.classList.remove("dialog-open");
     if (activeDialog && activeDialog.parentNode !== layer && activeDialog.parentNode) activeDialog.parentNode.removeChild(activeDialog);
     layer.innerHTML = "";
     activeDialog = null;
@@ -80,8 +82,13 @@ PPC.UI = (function () {
     closeHudMenu(true);
     returnFocus = document.activeElement;
     var p = el("div", { cls: "panel overlay" + (extraCls ? " " + extraCls : ""), role: "dialog", "aria-modal": "true", tabindex: "-1" });
-    // This study uses the viewport even when the zoomed room is letterboxed.
-    (extraCls === "specimen-inspection" ? document.getElementById("stage") : layer).appendChild(p);
+    var documentModal = document.documentElement && document.documentElement.classList.contains("document-layout") && !p.classList.contains("menu-panel");
+    if (documentModal) {
+      p.classList.add("document-modal");
+      document.documentElement.classList.add("dialog-open");
+    }
+    // Fixed dialogs must escape the room's layout containment on a scrolling page.
+    (extraCls === "specimen-inspection" || documentModal ? document.getElementById("stage") : layer).appendChild(p);
     activeDialog = p;
     setBackgroundInert(true);
     setTimeout(function () {

@@ -10,19 +10,51 @@ var PPC = PPC || {};
   var patientLayout = false;
   var lastWidth = 0, lastHeight = 0, rotationBlocked = false;
   var previousFocus = null, inertSnapshots = [];
+  var documentLayout = false, menuLayout = false, dockLayout = false, layoutState = null;
+
+  function wantsDocumentLayout() { return window.matchMedia("(any-pointer: coarse)").matches; }
 
   function viewportSize() {
-    // The CSS stage uses dynamic viewport units. In particular, mobile browser
-    // chrome and rotation may change its height without changing screen.height.
-    return { width: stage.clientWidth || window.innerWidth, height: stage.clientHeight || window.innerHeight };
+    // Read the viewport, never the stage: a normal document may be much taller
+    // than the visible screen. Pinch zoom must not resize/recompose the game.
+    var visual = window.visualViewport;
+    return { width: document.documentElement.clientWidth || window.innerWidth,
+      height: visual && Math.abs(visual.scale - 1) < .01 ? visual.height : window.innerHeight };
   }
 
   function resize() {
     var viewport = viewportSize(), vw = viewport.width, vh = viewport.height;
     lastWidth = vw; lastHeight = vh;
     var state = PPC.Game.getState();
+    var oldZoom = zoomLayout, oldMenu = menuLayout, oldDocument = documentLayout, oldState = layoutState;
+    documentLayout = wantsDocumentLayout();
+    menuLayout = !!document.querySelector(".menu-panel");
+    var dock = document.getElementById("investigate-bar");
+    dockLayout = !!dock;
+    layoutState = state;
     zoomLayout = !!(state && state.zoom);
     patientLayout = !!document.getElementById("patient-card");
+    document.documentElement.classList.toggle("document-layout", documentLayout);
+    document.documentElement.style.setProperty("--visible-height", vh + "px");
+    wrap.classList.toggle("menu-page", menuLayout);
+    if (documentLayout) {
+      // One desktop-style page, sized by width. Safari's short visible height
+      // must never shrink the whole clinic; excess content scrolls natively.
+      wrap.classList.remove("compact-landscape", "has-patient-strip");
+      wrap.style.width = vw + "px";
+      var header = document.querySelector(".clinic-header");
+      var headerHeight = header && !zoomLayout && !menuLayout ? header.offsetHeight : 0;
+      var safe = parseFloat(getComputedStyle(stage).getPropertyValue("--safe-bottom")) || 0;
+      var footerHeight = dock ? dock.offsetHeight + 16 + safe : 0;
+      var sceneHeight = zoomLayout ? vw * 9 / 16 : Math.max(vw * 9 / 16, vh - headerHeight - footerHeight);
+      // Extra tablet height uses a uniform camera scale. Only peripheral room
+      // scenery is cropped horizontally; plants and hotspots are never stretched.
+      var sceneWidth = sceneHeight * 16 / 9;
+      applyGeometry(sceneWidth, sceneHeight, vw, headerHeight + sceneHeight + footerHeight, headerHeight);
+      if (oldState !== state || oldDocument !== documentLayout || (menuLayout && !oldMenu)) window.scrollTo(0, 0);
+      else if (oldZoom !== zoomLayout) window.scrollTo(0, headerHeight);
+      return;
+    }
     var compact = vw > vh && vh <= 560;
     var safeBottom = parseFloat(getComputedStyle(stage).getPropertyValue("--safe-bottom")) || 0;
     var patientSpace = !compact && patientLayout && vw <= 640 && vh >= 560 ? 220 : 0;
@@ -35,11 +67,16 @@ var PPC = PPC || {};
     var width = 800 * scale, height = 450 * scale;
     var wrapWidth = compact ? vw : width;
     var wrapHeight = compact ? vh : height + headerSpace + patientSpace + dockSpace;
+    applyGeometry(width, height, wrapWidth, wrapHeight, compact ? Math.max(0, (vh - dockSpace - height) / 2) : headerSpace);
+    wrap.classList.toggle("compact-landscape", compact);
+    wrap.classList.toggle("has-patient-strip", patientSpace > 0);
+  }
+
+  function applyGeometry(width, height, wrapWidth, wrapHeight, top) {
     canvas.style.width = width + "px";
     canvas.style.height = height + "px";
-    canvas.style.marginTop = (compact ? Math.max(0, (vh - dockSpace - height) / 2) : headerSpace) + "px";
+    canvas.style.marginTop = top + "px";
     canvas.style.marginLeft = ((wrapWidth - width) / 2) + "px";
-    // Native room and moving canvas must use exactly the same rectangle.
     var scenery = document.getElementById("room-scenery");
     scenery.style.width = canvas.style.width;
     scenery.style.height = canvas.style.height;
@@ -47,8 +84,6 @@ var PPC = PPC || {};
     scenery.style.left = canvas.style.marginLeft;
     wrap.style.width = wrapWidth + "px";
     wrap.style.height = wrapHeight + "px";
-    wrap.classList.toggle("compact-landscape", compact);
-    wrap.classList.toggle("has-patient-strip", patientSpace > 0);
   }
 
   function updateRotationGate() {
@@ -119,12 +154,13 @@ var PPC = PPC || {};
   });
 
   function loop() {
-    var viewport = viewportSize();
-    if (viewport.width !== lastWidth || viewport.height !== lastHeight) resize();
+    var viewport = viewportSize(), s = PPC.Game.getState();
+    if (viewport.width !== lastWidth || viewport.height !== lastHeight || documentLayout !== wantsDocumentLayout() ||
+        layoutState !== s || menuLayout !== !!document.querySelector(".menu-panel") || dockLayout !== !!document.getElementById("investigate-bar") ||
+        zoomLayout !== !!(s && s.zoom) || patientLayout !== !!document.getElementById("patient-card")) resize();
     updateRotationGate();
+    document.documentElement.classList.toggle("presentation-locked", rotationBlocked || PPC.Opening.isActive());
     if (rotationBlocked || PPC.Opening.isActive()) { requestAnimationFrame(loop); return; }
-    var s = PPC.Game.getState();
-    if (zoomLayout !== !!(s && s.zoom) || patientLayout !== !!document.getElementById("patient-card")) resize();
     if (s) PPC.Game.tickEnter();
     if (s) PPC.Game.tickTimeCrunch();
     var phase = s ? s.phase : "menu";

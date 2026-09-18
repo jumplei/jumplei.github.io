@@ -51,3 +51,21 @@
 .rotate-card h1 { font: normal 32px/1.15 Georgia, serif; margin-bottom: 18px; }
 .rotate-card p { font-size: 16px; line-height: 1.6; }
 .rotate-card > span { display: block; margin-top: 36px; font: 9px/1.6 "Courier New", monospace; letter-spacing: 1px; color: #c6ceae; }
+
+/* Touch devices use the SAME desktop components in a normal-width document.
+   No height-fit miniature, fake rotated viewport, or nested game scroll frame. */
+html.document-layout { height: auto; min-height: 100%; overflow-x: clip; overflow-y: auto; background: #e8e0c4; }
+.document-layout body { height: auto; min-height: 100svh; overflow: visible; background: #e8e0c4; }
+.document-layout #stage { display: block; width: 100%; height: auto; min-height: var(--visible-height, 100svh); }
+.document-layout #game-wrap { margin: 0; box-shadow: none; background: #f0e7cc; }
+.document-layout .clinic-header { padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right)); }
+.document-layout #investigate-bar { bottom: max(8px, env(safe-area-inset-bottom)); }
+.document-layout #game-wrap.menu-page { height: auto !important; min-height: var(--visible-height, 100svh); }
+.document-layout .menu-page #game { position: absolute; }
+.document-layout .menu-page #ui-layer { position: relative; inset: auto; padding: 16px 0; min-height: var(--visible-height, 100svh); }
+.document-layout .menu-page .menu-panel { position: relative; left: auto; top: auto; transform: none; max-height: none; overflow: visible; margin: 0 auto; }
+/* Dialogs move outside the contained room so fixed positioning follows the
+   visible browser viewport even when the document is scrolled far down. */
+.document-layout .panel.overlay.document-modal { position: fixed; left: 50%; top: 50%; bottom: auto; transform: translate(-50%, -50%); max-height: calc(100dvh - 24px); }
+html.document-layout.presentation-locked, html.document-layout.dialog-open { overflow-y: hidden; }
+
