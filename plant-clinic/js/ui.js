@@ -12,7 +12,8 @@ PPC.UI = (function () {
   function setBackgroundInert(value) {
     var canvas = document.getElementById("game");
     var bar = document.getElementById("investigate-bar");
-    [canvas, bar].forEach(function (node) {
+    var card = document.getElementById("patient-card");
+    [canvas, bar, hud, card].forEach(function (node) {
       if (!node) return;
       node.inert = value;
       if (value && node.setAttribute) node.setAttribute("aria-hidden", "true");
@@ -22,19 +23,22 @@ PPC.UI = (function () {
 
   function clear() {
     var focusTarget = returnFocus;
+    // Specimen studies live on the full stage, outside the clipped room canvas.
+    if (activeDialog && activeDialog.parentNode !== layer && activeDialog.parentNode) activeDialog.parentNode.removeChild(activeDialog);
     var kids = layer.children;
     for (var i = kids.length - 1; i >= 0; i--) {
-      if (kids[i].id !== "investigate-bar") kids[i].parentNode.removeChild(kids[i]);
+      if (kids[i].id !== "investigate-bar" && kids[i].id !== "patient-card") kids[i].parentNode.removeChild(kids[i]);
     }
     activeDialog = null;
     returnFocus = null;
     setBackgroundInert(false);
     if (focusTarget && focusTarget.focus && document.contains && document.contains(focusTarget)) {
-      setTimeout(function () { focusTarget.focus(); }, 0);
+      setTimeout(function () { if (!activeDialog && document.contains(focusTarget)) focusTarget.focus(); }, 0);
     }
   }
 
   function clearAll() {
+    if (activeDialog && activeDialog.parentNode !== layer && activeDialog.parentNode) activeDialog.parentNode.removeChild(activeDialog);
     layer.innerHTML = "";
     activeDialog = null;
     returnFocus = null;
@@ -42,6 +46,9 @@ PPC.UI = (function () {
   }
 
   function hudClear() {
+    closeHudMenu(false);
+    hudMenuButton = null;
+    hudMenuPanel = null;
     hud.innerHTML = "";
   }
 
@@ -68,9 +75,11 @@ PPC.UI = (function () {
   }
 
   function panel(extraCls) {
+    closeHudMenu(true);
     returnFocus = document.activeElement;
     var p = el("div", { cls: "panel overlay" + (extraCls ? " " + extraCls : ""), role: "dialog", "aria-modal": "true", tabindex: "-1" });
-    layer.appendChild(p);
+    // This study uses the viewport even when the zoomed room is letterboxed.
+    (extraCls === "specimen-inspection" ? document.getElementById("stage") : layer).appendChild(p);
     activeDialog = p;
     setBackgroundInert(true);
     setTimeout(function () {
@@ -81,7 +90,8 @@ PPC.UI = (function () {
       } else {
         p.setAttribute("aria-label", "Pixel Plant Clinic dialog");
       }
-      var first = p.querySelector && p.querySelector("button, input, [tabindex='0']");
+      if (activeDialog !== p) return;
+      var first = p.querySelector && p.querySelector("[data-dialogue-focus], button:not([disabled]), input:not([disabled]), [tabindex='0']");
       if (first && first.focus) first.focus();
       else if (p.focus) p.focus();
     }, 0);
@@ -93,13 +103,20 @@ PPC.UI = (function () {
     var focusable = Array.prototype.slice.call(activeDialog.querySelectorAll("button:not([disabled]), input:not([disabled]), [tabindex='0']"));
     if (!focusable.length) return false;
     var first = focusable[0], last = focusable[focusable.length - 1];
+    if (focusable.indexOf(document.activeElement) === -1) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+      return true;
+    }
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); return true; }
     if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); return true; }
     return false;
   }
 
   function handleEscape() {
+    if (closeHudMenu(true)) return true;
     if (!activeDialog) return false;
+    if (activeDialog.classList.contains("clinic-confirm")) { clear(); return true; }
     if (activeDialog.classList.contains("menu-panel")) return false;
     if (activeDialog.classList.contains("tutorial-panel")) { menu(); return true; }
     var state = PPC.Game.getState();
@@ -153,49 +170,42 @@ PPC.UI = (function () {
     return c;
   }
 
-  function ownerPortrait(caseData, small) {
-    var portrait = caseData.portrait || {};
-    var skin = portrait.skin || "#e7b57d";
-    var hair = portrait.hair || "#5b3b2d";
-    var shirt = portrait.shirt || "#47715a";
-    var accent = portrait.accent || "#f0c868";
-    var c = document.createElement("canvas");
-    c.width = 32;
-    c.height = 32;
-    c.className = "owner-portrait" + (small ? " small" : "");
-    c.setAttribute("role", "img");
-    c.setAttribute("aria-label", "Portrait of " + caseData.customer);
-    var cx = c.getContext("2d");
-    function px(x, y, w, h, color) { cx.fillStyle = color; cx.fillRect(x, y, w, h); }
-    px(0, 0, 32, 32, "#4d6e62");
-    px(2, 2, 28, 28, "#d8bd7d");
-    px(4, 4, 24, 24, "#7ca36c");
-    px(6, 21, 20, 9, "#352b2a");
-    px(7, 20, 18, 10, shirt);
-    px(13, 17, 6, 5, skin);
-    px(9, 7, 14, 12, hair);
-    px(10, 8, 12, 11, skin);
-    px(9, 7, 14, 4, hair);
-    px(8, 10, 3, 7, hair);
-    px(21, 10, 3, 7, hair);
-    px(12, 12, 2, 2, "#2f2928");
-    px(18, 12, 2, 2, "#2f2928");
-    px(15, 14, 2, 2, "#c17d62");
-    px(14, 17, 5, 1, "#8d4f4f");
-    px(8, 23, 4, 7, accent);
-    px(20, 23, 4, 7, accent);
-    if (portrait.accessory === "flower") {
-      px(21, 6, 3, 3, "#d94d5a"); px(22, 5, 1, 5, "#f28a78"); px(20, 7, 5, 1, "#f28a78");
-    } else if (portrait.accessory === "hat") {
-      px(7, 5, 18, 3, accent); px(10, 2, 12, 5, "#b77a3f"); px(12, 3, 8, 2, accent);
-    } else if (portrait.accessory === "chef") {
-      px(9, 3, 14, 5, "#f4ead1"); px(7, 5, 5, 4, "#f4ead1"); px(20, 5, 5, 4, "#f4ead1"); px(11, 1, 10, 4, "#fff8e6");
-    } else if (portrait.accessory === "cap") {
-      px(8, 5, 16, 4, accent); px(11, 3, 11, 4, "#416b49"); px(22, 8, 5, 2, accent);
+  function refreshClinic(state) {
+    if (state && state.phase === "investigate" && PPC.UI.investigateBar && PPC.UI.investigateBar.show) {
+      PPC.UI.investigateBar.show(state.caseData, state);
     }
-    px(0, 0, 32, 2, "#3b2a22"); px(0, 30, 32, 2, "#3b2a22");
-    px(0, 0, 2, 32, "#3b2a22"); px(30, 0, 2, 32, "#3b2a22");
-    return c;
+  }
+
+  function toolIcon(name) {
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "tool-icon");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    svg.setAttribute("width", "30");
+    svg.setAttribute("height", "30");
+    svg.setAttribute("viewBox", "0 0 32 32");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", name === "diagnose" ? "2.6" : "1.5");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", {
+      inspect: "M21 13a8 8 0 1 1-16 0 8 8 0 0 1 16 0M19 19l9 9M13 8v10M8 13h10",
+      list: "M12 8h15M12 16h15M12 24h15M4 7l2 2 3-4M4 15l2 2 3-4M4 23l2 2 3-4",
+      owner: "M22 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0M4 28c0-7 5-11 12-11s12 4 12 11",
+      chart: "M12 6H6v23h20V6h-6M12 4h8v5h-8zM10 15h12M10 21h10",
+      notes: "M5 4h22v25H5zM12 4v25M16 10h7M16 16h7M16 22h5",
+      ai: "M3 4h26v19H3zM11 29h10M16 23v6M7 16h4l3-7 4 10 3-6h4",
+      meter: "M16 2c-3 7-9 14-9 19a9 9 0 0 0 18 0c0-5-6-12-9-19zM11 21c0 3 2 5 5 5",
+      diagnose: "M6 16l7 8L27 7"
+    }[name] || "M6 6h20v20H6z");
+    svg.appendChild(path);
+    return svg;
+  }
+
+  function ownerPortrait(caseData) {
+    return PPC.Portraits.create(caseData);
   }
 
   function menu() {
@@ -257,45 +267,143 @@ PPC.UI = (function () {
     p.appendChild(el("p", { cls: "tiny menu-tip", text: "Clinic tip: use the notebook and evidence computer as tools, not answers." }));
   }
 
-  function hudFor(state) {
-    hudClear();
-    var left = el("div", { cls: "chip", id: "hud-left" });
-    left.appendChild(el("span", { text: state.caseData ? state.caseData.title + " \u2014 patient: " + state.caseData.customer : "Main Menu" }));
-    var center = el("div", { id: "hud-center" });
-    if (!state.zoom && state.phase !== "timeout") {
-      var restart = el("button", { cls: "btn warn small", text: "Restart", on: function () { PPC.Game.restart(); } });
-      restart.style.pointerEvents = "auto";
-      center.appendChild(restart);
-    }
-    var right = el("div", { id: "hud-right" });
-    if (state.timeCrunch && (state.phase === "investigate" || state.phase === "diagnose" || state.phase === "treat")) {
-      var timer = el("div", { cls: "chip emergency-timer" + (state.timeRemaining <= 30 ? " urgent" : ""), id: "time-crunch-timer", role: "timer", "aria-live": "off", "aria-label": "Emergency time remaining " + PPC.Game.formatTime(state.timeRemaining), text: "EMERGENCY " + PPC.Game.formatTime(state.timeRemaining) });
-      right.appendChild(timer);
-    }
-    var phases = ["Intake", "Investigate", "Diagnose", "Treat", "Outcome", "Summary", "Time Out"];
-    var idx = ["intake", "investigate", "diagnose", "treat", "outcome", "summary", "timeout"].indexOf(state.phase);
-    var chip = el("div", { cls: "chip", text: idx >= 0 ? phases[idx] : "" });
-    chip.style.fontSize = "11px";
-    right.appendChild(chip);
-    hud.appendChild(left);
-    hud.appendChild(center);
-    hud.appendChild(right);
+  var hudMenuButton = null;
+  var hudMenuPanel = null;
+
+  function closeHudMenu(restoreFocus) {
+    if (!hudMenuPanel || hudMenuPanel.hidden) return false;
+    hudMenuPanel.hidden = true;
+    hudMenuButton.setAttribute("aria-expanded", "false");
+    if (restoreFocus) hudMenuButton.focus();
+    return true;
   }
 
-  function dialogue(caseData, lineIndex, isLast) {
+  function confirmClinicAction(action) {
+    closeHudMenu(true);
     clear();
-    var p = panel("dialog");
+    var p = panel("clinic-confirm");
+    var restarting = action === "restart";
+    p.appendChild(el("h2", { text: restarting ? "Restart this case?" : "Return to the main menu?" }));
+    p.appendChild(el("p", { text: "Your current investigation will be cleared. Completed cases and saved best scores will be kept." }));
+    if (PPC.Game.getState().timeCrunch) p.appendChild(el("p", { cls: "tiny", text: "The emergency timer continues while this confirmation is open." }));
+    var actions = el("div", { cls: "row" });
+    actions.appendChild(btn("Keep playing", "ghost", function () { clear(); }));
+    actions.appendChild(btn(restarting ? "Restart case" : "Main menu", "", function () {
+      if (restarting) PPC.Game.restart();
+      else { PPC.UI.investigateBar.clear(); PPC.Game.toMenu(); }
+    }));
+    p.appendChild(actions);
+  }
+
+  function hudFor(state) {
+    hudClear();
+    // Magnified inspection owns the full canvas; hudClear also closes its menu.
+    if (!state || !state.caseData || state.zoom) return;
+    var cd = state.caseData;
+    var header = el("header", { cls: "clinic-header", "aria-label": "Pixel Plant Clinic" });
+    var brand = el("div", { cls: "clinic-brand" });
+    brand.appendChild(el("span", { cls: "brand-mark", "aria-hidden": "true", html: '<svg viewBox="0 0 40 40" width="40" height="40"><rect width="40" height="40" rx="4" fill="#315747"/><path d="M11 29V17l7-10h12v11l-9 11z" fill="#c9d2a2"/><path d="M11 31L26 11" fill="none" stroke="#f1e8be" stroke-width="2"/></svg>' }));
+    var brandCopy = el("div", { cls: "brand-copy" });
+    brandCopy.appendChild(el("div", { cls: "brand-title", text: "PIXEL PLANT CLINIC" }));
+    brandCopy.appendChild(el("div", { cls: "brand-credit", text: "BY ETHAN LEI" }));
+    brand.appendChild(brandCopy);
+    header.appendChild(brand);
+
+    var info = el("div", { cls: "header-case" });
+    info.appendChild(el("div", { cls: "header-case-title", text: cd.title }));
+    var caseNumber = String(CASE_ORDER.indexOf(state.caseId) + 1).padStart(2, "0");
+    var plantLabel = cd.plant.charAt(0) + cd.plant.slice(1).toLowerCase();
+    info.appendChild(el("div", { cls: "header-case-subtitle", text: "Case " + caseNumber + "  /  " + plantLabel }));
+    header.appendChild(info);
+
+    // Status, not navigation: never let the progress display bypass diagnosis rules.
+    var progress = el("ol", { cls: "header-progress", "aria-label": "Case progress" });
+    var phases = ["investigate", "diagnose", "treat"];
+    var active = phases.indexOf(state.phase);
+    var finished = state.phase === "outcome" || state.phase === "summary";
+    ["Investigate", "Diagnose", "Treat"].forEach(function (label, i) {
+      var status = finished || (active > i) ? "complete" : (active === i ? "current" : "upcoming");
+      var item = el("li", { cls: "header-step is-" + status, "data-phase": phases[i], "data-status": status });
+      if (active === i) item.setAttribute("aria-current", "step");
+      item.appendChild(el("span", { cls: "step-number", text: String(i + 1) }));
+      item.appendChild(el("span", { cls: "step-label", text: label }));
+      progress.appendChild(item);
+    });
+    header.appendChild(progress);
+
+    var controls = el("div", { cls: "header-controls" });
+    var mode = el("div", { cls: "header-mode" + (state.timeCrunch ? " is-emergency" : ""), "aria-label": state.timeCrunch ? "Emergency mode" : "Standard mode" });
+    mode.appendChild(el("span", { cls: "mode-dot", "aria-hidden": "true" }));
+    mode.appendChild(el("span", { text: state.timeCrunch ? "EMERGENCY" : "STANDARD" }));
+    if (state.timeCrunch && active !== -1) mode.appendChild(el("span", {
+      cls: "header-timer" + (state.timeRemaining <= 30 ? " urgent" : ""), id: "time-crunch-timer", role: "timer", "aria-live": "off",
+      "aria-label": "Emergency time remaining " + PPC.Game.formatTime(state.timeRemaining), text: PPC.Game.formatTime(state.timeRemaining)
+    }));
+    controls.appendChild(mode);
+    var menuHost = el("div", { cls: "header-menu" });
+    hudMenuButton = el("button", { type: "button", cls: "header-menu-toggle", id: "clinic-menu-toggle", "aria-label": "Clinic menu", "aria-haspopup": "menu", "aria-expanded": "false", "aria-controls": "clinic-menu", html: '<svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M2 4h22M2 13h22M2 22h22" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>', on: function () {
+      if (!hudMenuPanel.hidden) { closeHudMenu(true); return; }
+      hudMenuPanel.hidden = false;
+      hudMenuButton.setAttribute("aria-expanded", "true");
+      hudMenuPanel.querySelector("button").focus();
+    } });
+    hudMenuPanel = el("div", { cls: "header-dropdown", id: "clinic-menu", role: "menu", "aria-labelledby": "clinic-menu-toggle" });
+    hudMenuPanel.hidden = true;
+    [["Continue playing", function () { closeHudMenu(true); }], ["Restart case", function () { confirmClinicAction("restart"); }], ["Main menu", function () { confirmClinicAction("home"); }]].forEach(function (entry) {
+      hudMenuPanel.appendChild(el("button", { type: "button", role: "menuitem", tabindex: "-1", cls: "header-menu-item", text: entry[0], on: entry[1] }));
+    });
+    menuHost.appendChild(hudMenuButton);
+    menuHost.appendChild(hudMenuPanel);
+    menuHost.onkeydown = function (e) {
+      var open = !hudMenuPanel.hidden;
+      if (e.key === "Escape" && open) { closeHudMenu(true); e.preventDefault(); e.stopPropagation(); return; }
+      if (e.key === "Tab" && open) { closeHudMenu(true); return; }
+      if (["ArrowDown", "ArrowUp", "Home", "End"].indexOf(e.key) === -1) return;
+      e.preventDefault();
+      var items = Array.prototype.slice.call(hudMenuPanel.querySelectorAll("button"));
+      var current = items.indexOf(document.activeElement);
+      if (!open) { hudMenuPanel.hidden = false; hudMenuButton.setAttribute("aria-expanded", "true"); }
+      var index = e.key === "Home" ? 0 : (e.key === "End" ? items.length - 1 : (current + (e.key === "ArrowUp" ? -1 : 1) + items.length) % items.length);
+      if (!open && e.key === "ArrowUp") index = items.length - 1;
+      items[index].focus();
+    };
+    controls.appendChild(menuHost);
+    header.appendChild(controls);
+    hud.appendChild(header);
+  }
+
+  if (document.addEventListener) document.addEventListener("pointerdown", function (e) {
+    if (hudMenuPanel && !hudMenuPanel.hidden && !hudMenuPanel.parentNode.contains(e.target)) closeHudMenu(false);
+  });
+
+  function conversation(caseData, kind, kicker) {
+    // Keep the original tool as the focus-return target across dialogue turns.
+    var origin = activeDialog && activeDialog.classList.contains("clinic-dialogue") ? returnFocus : null;
+    clear();
+    var p = panel("dialog clinic-dialogue " + kind);
+    if (origin) returnFocus = origin;
     var layout = el("div", { cls: "dialogue-layout" });
     layout.appendChild(ownerPortrait(caseData, false));
     var copy = el("div", { cls: "dialogue-copy" });
-    copy.appendChild(el("div", { cls: "nameplate", text: caseData.customer } ));
-    copy.appendChild(el("p", { text: caseData.intro[lineIndex] }));
-    var row = el("div", { cls: "row", style: "justify-content:flex-end" });
-    if (isLast) row.appendChild(btn("Start Investigation", "", function () { PPC.Game.beginInvestigate(); }));
-    else row.appendChild(btn("Continue", "", function () { PPC.Game.advanceDialogue(lineIndex); }));
-    copy.appendChild(row);
+    copy.appendChild(el("div", { cls: "dialogue-kicker", text: kicker }));
+    copy.appendChild(el("h2", { cls: "dialogue-speaker", text: caseData.customer }));
+    var content = el("div", { cls: "dialogue-content" });
+    copy.appendChild(content);
     layout.appendChild(copy);
     p.appendChild(layout);
+    var footer = el("div", { cls: "dialogue-footer" });
+    p.appendChild(footer);
+    return { panel: p, content: content, footer: footer };
+  }
+
+  function dialogue(caseData, lineIndex, isLast) {
+    var view = conversation(caseData, "intake-dialogue", "PATIENT ARRIVAL");
+    var lineId = "dialogue-line-" + (++dialogCount);
+    view.content.appendChild(el("p", { cls: "dialogue-line", id: lineId, text: caseData.intro[lineIndex] }));
+    view.panel.setAttribute("aria-describedby", lineId);
+    view.footer.appendChild(el("span", { cls: "dialogue-progress", text: (lineIndex + 1) + " / " + caseData.intro.length }));
+    if (isLast) view.footer.appendChild(btn("Start Investigation", "", function () { PPC.Game.beginInvestigate(); }));
+    else view.footer.appendChild(btn("Continue", "", function () { PPC.Game.advanceDialogue(lineIndex); }));
   }
 
   function tutorial(page) {
@@ -381,58 +489,98 @@ PPC.UI = (function () {
     p.appendChild(btn("Continue to Clinic", "", function () { onContinue(); }));
   }
 
-  function closeup(caseData, hotspot) {
+  function closeup(caseData, hotspot, showUnderside) {
+    // Keep the original tool/canvas as the return target across area and side changes.
+    var origin = activeDialog ? returnFocus : document.activeElement;
     clear();
-    var p = panel();
-    p.appendChild(el("h2", { html: "Close-up: <span style='text-transform:none'>" + hotspot.name + "</span>" }));
-    p.appendChild(el("p", { text: hotspot.observation }));
-    if (hotspot.flip && !PPC.Game.getState().flipped[hotspot.id]) {
-      p.appendChild(el("div", { cls: "row", style: "justify-content:center;margin:8px 0" }));
-      p.appendChild(btn(hotspot.flip.label, "", function () {
-        PPC.Game.flipLeaf(hotspot);
-      }));
-    } else if (hotspot.flip && PPC.Game.getState().flipped[hotspot.id]) {
-      p.appendChild(el("div", { cls: "row", style: "justify-content:center;margin:8px 0" }));
-      p.appendChild(el("div", { cls: "choice picked", text: hotspot.flip.text + "  [clue recorded]" }));
-    } else {
-      p.appendChild(el("p", { cls: "tiny", text: "This observation has been added to your clinic notebook." }));
+    var state = PPC.Game.getState();
+    var revealed = !!(hotspot.flip && state.flipped[hotspot.id]);
+    var underside = revealed && showUnderside !== false;
+    var index = caseData.hotspots.indexOf(hotspot);
+    var p = panel("specimen-inspection");
+    if (origin) returnFocus = origin;
+    p.setAttribute("data-hotspot-id", hotspot.id);
+    p.setAttribute("data-side", underside ? "underside" : "initial");
+    var heading = el("header", { cls: "specimen-heading" });
+    heading.appendChild(el("div", { cls: "specimen-kicker", text: "BOTANICAL EXAMINATION · " + caseData.plant }));
+    heading.appendChild(el("h2", { text: hotspot.name, tabindex: "-1", "data-dialogue-focus": "" }));
+    p.appendChild(heading);
+
+    var body = el("div", { cls: "specimen-body" });
+    var figure = el("figure", { cls: "specimen-figure" });
+    var description = underside ? hotspot.flip.text : hotspot.observation;
+    var art = el("canvas", { cls: "specimen-art", width: "720", height: "480", role: "img", "aria-label": caseData.plant + " — " + description });
+    figure.appendChild(art);
+    figure.appendChild(el("figcaption", { cls: "specimen-caption", text: "DETAIL STUDY " + (index + 1) + " / " + caseData.hotspots.length + " · " + (hotspot.flip ? (underside ? "LEAF UNDERSIDE" : "BEFORE TURNING") : "SELECTED AREA") }));
+    body.appendChild(figure);
+
+    var notes = el("section", { cls: "specimen-notes", "aria-label": "Examination notes" });
+    notes.appendChild(el("div", { cls: "specimen-kicker", text: underside ? "REVEALED OBSERVATION" : "OBSERVATION" }));
+    var noteId = "specimen-note-" + (++dialogCount);
+    notes.appendChild(el("p", { cls: "specimen-observation", id: noteId, text: description }));
+    p.setAttribute("aria-describedby", noteId);
+    if (hotspot.flip) {
+      notes.appendChild(el("p", { cls: "specimen-hint", text: revealed ? "Both views are available. Turning again will not record duplicate evidence." : "Turn this leaf over to examine the hidden surface." }));
+      var flip = btn(underside ? "Return to first view" : hotspot.flip.label, "specimen-flip", function () {
+        if (!revealed) PPC.Game.flipLeaf(hotspot);
+        else closeup(caseData, hotspot, !underside);
+      });
+      flip.setAttribute("data-action", "flip-specimen");
+      notes.appendChild(flip);
     }
-    p.appendChild(el("div", { cls: "row", style: "justify-content:flex-end;margin-top:10px" }));
-    p.appendChild(closeBtn());
+    notes.appendChild(el("div", { cls: "specimen-saved", text: "✓ Observation saved to notebook" }));
+    notes.appendChild(el("div", { cls: "specimen-kicker specimen-areas-label", text: "EXAMINE ANOTHER AREA" }));
+    var areas = el("div", { cls: "specimen-areas", role: "group", "aria-label": "Plant inspection areas" });
+    caseData.hotspots.forEach(function (h, i) {
+      var current = h.id === hotspot.id;
+      var button = el("button", { cls: "specimen-area" + (current ? " selected" : ""), "data-area-id": h.id, "aria-pressed": String(current), on: function () { PPC.Game.inspectHotspot(h); } });
+      button.appendChild(el("span", { cls: "specimen-area-number", text: String(i + 1).padStart(2, "0") }));
+      button.appendChild(el("span", { text: h.name }));
+      areas.appendChild(button);
+    });
+    notes.appendChild(areas);
+    body.appendChild(notes);
+    p.appendChild(body);
+    var footer = el("footer", { cls: "specimen-footer" });
+    footer.appendChild(el("span", { text: "Illustrated detail · not to scale" }));
+    var back = btn("Back to plant", "", function () { clear(); });
+    back.setAttribute("data-action", "close-specimen");
+    footer.appendChild(back);
+    p.appendChild(footer);
+    PPC.Render.drawCloseup(art, caseData, hotspot, underside);
   }
 
-  function interview(caseData, asked) {
-    clear();
-    var p = panel("wide");
-    var remaining = caseData.maxQuestions - asked.length;
-    var ownerHeader = el("div", { cls: "owner-interview-header" });
-    ownerHeader.appendChild(ownerPortrait(caseData, true));
-    var ownerTitle = el("div", { cls: "grow" });
-    ownerTitle.appendChild(el("h2", { html: caseData.customer + " <span class='tiny' style='text-transform:none'>(" + remaining + " question" + (remaining === 1 ? "" : "s") + " left)</span>" }));
-    ownerTitle.appendChild(el("p", { cls: "tiny", text: "Ask focused questions. Answers are saved to your notebook." }));
-    ownerHeader.appendChild(ownerTitle);
-    p.appendChild(ownerHeader);
-    var list = el("div", { cls: "stack" });
-    caseData.questions.forEach(function (q, i) {
-      var used = asked.indexOf(q.id) !== -1;
-      var b = el("button", {
-        cls: "choice" + (used ? " picked" : ""),
-        text: q.text,
-        on: used ? null : function () { PPC.Game.askQuestion(q); }
+  function interview(caseData, asked, selectedId) {
+    var remaining = Math.max(0, caseData.maxQuestions - asked.length);
+    var selected = caseData.questions.find(function (q) { return q.id === selectedId && asked.indexOf(q.id) !== -1; });
+    var view = conversation(caseData, "owner-dialogue", "ASK OWNER · " + remaining + " QUESTION" + (remaining === 1 ? "" : "S") + " LEFT");
+    view.panel.setAttribute("data-interview-step", selected ? "answer" : "questions");
+    if (selected) {
+      var replyId = "dialogue-reply-" + (++dialogCount);
+      var reply = el("div", { cls: "dialogue-reply", id: replyId, tabindex: "-1", "data-dialogue-focus": "" });
+      reply.appendChild(el("p", { cls: "dialogue-question", text: "You asked: " + selected.text }));
+      reply.appendChild(el("p", { cls: "dialogue-line", text: selected.answer }));
+      view.content.appendChild(reply);
+      view.panel.setAttribute("aria-describedby", replyId);
+      view.footer.appendChild(el("span", { cls: "dialogue-progress", text: "Saved to notebook" }));
+    } else {
+      view.content.appendChild(el("p", { cls: "dialogue-prompt", text: remaining ? "What would you like to ask?" : "No questions left. You can revisit recorded answers." }));
+      var list = el("div", { cls: "dialogue-questions", role: "group", "aria-label": "Questions for " + caseData.customer });
+      caseData.questions.forEach(function (q) {
+        var used = asked.indexOf(q.id) !== -1;
+        var b = el("button", { cls: "dialogue-choice" + (used ? " recorded" : ""), "data-question-id": q.id, on: function () { PPC.Game.askQuestion(q); } });
+        b.appendChild(el("span", { cls: "question-state", text: used ? "REVISIT" : "ASK" }));
+        b.appendChild(el("span", { text: q.text }));
+        b.disabled = !used && remaining === 0;
+        list.appendChild(b);
       });
-      if (used) {
-        b.disabled = true;
-        b.style.cursor = "default";
-        var ans = el("div", { cls: "tiny", text: "\u2014 " + q.answer, style: "padding:0 10px 6px" });
-        list.appendChild(b);
-        list.appendChild(ans);
-      } else {
-        list.appendChild(b);
-      }
-    });
-    p.appendChild(list);
-    p.appendChild(el("div", { cls: "row", style: "justify-content:space-between;margin-top:12px" }));
-    p.appendChild(btn("Back to Clinic", "ghost", function () { clear(); }));
+      view.content.appendChild(list);
+      view.footer.appendChild(el("span", { cls: "dialogue-progress", text: "Answers are saved automatically" }));
+    }
+    var actions = el("div", { cls: "dialogue-actions" });
+    actions.appendChild(btn("Back to Clinic", "ghost", function () { clear(); }));
+    if (selected) actions.appendChild(btn(remaining ? "More questions" : "Review questions", "", function () { interview(caseData, asked); }));
+    view.footer.appendChild(actions);
   }
 
   function inspectList(caseData, state) {
@@ -473,6 +621,26 @@ PPC.UI = (function () {
     }
   }
 
+  function patientCard(caseData, state) {
+    var old = document.getElementById("patient-card");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    if (!state || state.phase !== "investigate" || state.zoom) return;
+    var number = String(CASE_ORDER.indexOf(caseData.id) + 1).padStart(2, "0");
+    var card = el("aside", { id: "patient-card", cls: "patient-card", "aria-label": "Current patient", "data-case-id": caseData.id });
+    card.appendChild(el("div", { cls: "patient-file-number", text: "PATIENT FILE / " + number }));
+    var identity = el("div", { cls: "patient-identity" });
+    identity.appendChild(ownerPortrait(caseData));
+    var copy = el("div", { cls: "patient-identity-copy" });
+    copy.appendChild(el("h2", { cls: "patient-owner", text: caseData.customer }));
+    copy.appendChild(el("p", { cls: "patient-species", text: caseData.plant.charAt(0) + caseData.plant.slice(1).toLowerCase() }));
+    identity.appendChild(copy);
+    card.appendChild(identity);
+    card.appendChild(el("blockquote", { cls: "patient-quote", text: "“" + (caseData.ownerQuote || caseData.intro[0]) + "”" }));
+    card.appendChild(el("button", { type: "button", cls: "patient-chart-link", text: "View patient chart →", on: function () { PPC.Game.openPatientRecord(); } }));
+    layer.appendChild(card);
+    if (activeDialog) setBackgroundInert(true);
+  }
+
   function patientRecord(caseData) {
     clear();
     var p = panel("wide");
@@ -499,23 +667,55 @@ PPC.UI = (function () {
 
   function computer(caseData, state) {
     clear();
-    var p = panel();
-    p.appendChild(el("h2", { text: "Evidence Compatibility" }));
-    var est = PPC.Game.aiEstimates(caseData, state.clues);
-    est.forEach(function (e) {
-      var row = el("div", { cls: "ai-bar" });
-      var r = el("div", { cls: "row" });
-      r.appendChild(el("span", { text: e.name }));
-      r.appendChild(el("span", { text: e.pct + "% match" }));
-      row.appendChild(r);
-      var track = el("div", { cls: "ai-track" });
-      var fill = el("div", { cls: "ai-fill", style: "width:" + Math.max(2, e.pct) + "%" });
-      track.appendChild(fill);
-      row.appendChild(track);
-      p.appendChild(row);
+    var p = panel("wide evidence-review");
+    p.appendChild(el("h2", { text: "Evidence AI — Reasoning Review" }));
+    p.appendChild(el("p", { cls: "tiny", text: "A local rule-based teaching aid, not a trained model or a diagnostic service. No probabilities are shown. Only recorded clues are considered; unchecked areas remain unknown." }));
+    var review = PPC.Game.evidenceReview(caseData, state.clues, state.asked);
+    p.appendChild(el("p", { cls: "ai-assessment", text: review.message }));
+    var next = el("section", { cls: "ai-next-check" });
+    next.appendChild(el("h3", { text: "Suggested next check" }));
+    if (review.nextCheck) {
+      next.appendChild(el("p", { text: review.nextCheck.action }));
+      next.appendChild(el("p", { cls: "tiny", text: review.nextCheck.priority > 0 ? "This check can help distinguish the candidates. Its result is not known yet." : "This check adds shared context, not a distinguishing sign. Its result is not known yet." }));
+      var interview = review.nextCheck.kind === "question";
+      next.appendChild(btn(interview ? "Open Owner Interview" : "Open Inspection List", "small", function () {
+        if (interview) PPC.Game.openInterview();
+        else PPC.Game.openInspectList();
+      }));
+    } else {
+      next.appendChild(el("p", { cls: "tiny", text: review.unavailableChecks ? "No further checks are available with the remaining interview allowance. Missing evidence stays unknown; do not assume a result." : "All available modeled evidence has been recorded. Compare the reasons below; this limited case cannot establish a real-world diagnosis." }));
+    }
+    p.appendChild(next);
+    var labels = {
+      unknown: "Insufficient evidence",
+      limited: "Limited support — more evidence needed",
+      supported: "Supported pattern — not confirmed",
+      mixed: "Mixed evidence — review contradictions",
+      against: "Evidence against this pattern"
+    };
+    function evidenceList(card, title, entries, emptyText, cls) {
+      card.appendChild(el("h4", { cls: cls, text: title }));
+      if (!entries.length) { card.appendChild(el("p", { cls: "tiny", text: emptyText })); return; }
+      var list = el("ul", { cls: "ai-evidence-list" });
+      entries.forEach(function (entry) {
+        var item = el("li");
+        item.appendChild(el("strong", { text: entry.text + (entry.diagnostic ? " (key sign)" : "") }));
+        item.appendChild(el("span", { text: entry.reason }));
+        list.appendChild(item);
+      });
+      card.appendChild(list);
+    }
+    review.candidates.forEach(function (candidate) {
+      var card = el("section", { cls: "ai-candidate" });
+      card.appendChild(el("h3", { text: candidate.name }));
+      card.appendChild(el("p", { cls: "ai-status", text: labels[candidate.status] + (candidate.tied ? " · Tied evidence rank" : "") }));
+      evidenceList(card, "Supports", candidate.supporting, "No supporting clue recorded.", "ai-support-heading");
+      evidenceList(card, "Argues against", candidate.contradicting, "No contradictory clue recorded. This does not confirm the disease.", "ai-against-heading");
+      card.appendChild(el("h4", { text: "Not checked / unknown" }));
+      card.appendChild(el("p", { cls: "tiny", text: candidate.unknown.length ? candidate.unknown.map(function (entry) { return entry.action; }).join("; ") : "No unrecorded clues remain in this candidate's limited rule set." }));
+      p.appendChild(card);
     });
-    p.appendChild(el("p", { cls: "tiny", text: "Rule-based expert system — these are evidence compatibility scores, not probabilities. Missing or contradictory evidence can change the result, so verify every suggestion before diagnosing." }));
-    p.appendChild(el("div", { cls: "row", style: "justify-content:flex-end;margin-top:10px" }));
+    p.appendChild(el("p", { cls: "tiny", text: "How it works: distinguishing signs carry more weight than shared conditions. Context support is capped, repeated reports count once, and contrary evidence lowers the ranking. Missing evidence is never treated as an absent symptom. These authored rules do not prove or rule out a disease." }));
     p.appendChild(btn("Back to Clinic", "ghost", function () { clear(); }));
   }
 
@@ -662,7 +862,7 @@ PPC.UI = (function () {
   function updateTimer(text, urgent) {
     var timer = document.getElementById("time-crunch-timer");
     if (!timer) return;
-    timer.textContent = "EMERGENCY " + text;
+    timer.textContent = text;
     if (timer.setAttribute) timer.setAttribute("aria-label", "Emergency time remaining " + text);
     timer.classList.toggle("urgent", !!urgent);
   }
@@ -724,6 +924,8 @@ PPC.UI = (function () {
   }
 
   return {
+    refreshClinic: refreshClinic,
+    toolIcon: (typeof toolIcon === "function") ? toolIcon : null,
     clear: clear,
     clearAll: clearAll,
     handleEscape: handleEscape,
@@ -737,6 +939,7 @@ PPC.UI = (function () {
     interview: interview,
     inspectList: inspectList,
     notebook: notebook,
+    patientCard: patientCard,
     patientRecord: patientRecord,
     computer: computer,
     meter: meter,

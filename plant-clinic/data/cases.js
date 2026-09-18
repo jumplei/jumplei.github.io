@@ -1,3 +1,7 @@
+// Evidence AI uses authored, signed rules: +1..+4 support, -1..-4 oppose.
+// keyClues identify distinguishing signs, not the answer key. Missing clues are unknown.
+// aiEvidence groups repeated reports of the same fact so they do not count twice.
+// These teaching heuristics are not calibrated probabilities or clinical diagnoses.
 var CASES = {
   rose_rust: {
     id: "rose_rust",
@@ -26,6 +30,7 @@ var CASES = {
     },
     maxQuestions: 4,
     customer: "Mrs. Petal",
+    ownerQuote: "The spots are spreading.",
     portrait: { skin: "#e7b57d", hair: "#744638", shirt: "#b74955", accent: "#f0c868", accessory: "flower" },
     intro: [
       "Please, doctor! Something is wrong with my roses.",
@@ -65,10 +70,25 @@ var CASES = {
       { id: "q_spacing", text: "How close together are the bushes planted?",
         answer: "Quite close to a wall, so there isn't much airflow between them.", clue: "q_spacing" }
     ],
+    aiEvidence: {
+      leaf_under: { text: "Orange-brown powdery pustules on the leaf underside" },
+      leaf_top: { text: "Yellow-orange spots on upper leaf surfaces", check: "upper leaf surface" },
+      fallen: { text: "Fallen leaves with rust-colored bumps", check: "lower leaves and litter" },
+      canopy: { text: "Crowded stems with poor airflow", group: "crowding", check: "stems and canopy" },
+      q_watering: { text: "Evening watering wets the leaves" },
+      q_timing: { text: "Spots followed rainy, humid weather" },
+      q_spacing: { text: "Closely spaced bushes near a wall", group: "crowding" }
+    },
     diseases: [
-      { id: "rose_rust", name: "Rose rust", description: "Orange rust pustules usually form beneath leaves, with yellow-orange spotting above and repeat infections in damp conditions.", clues: { leaf_under: 3, leaf_top: 2, fallen: 2, canopy: 1, q_watering: 2, q_timing: 1, q_spacing: 1 } },
-      { id: "powdery_mildew", name: "Powdery mildew", description: "A wipeable white coating develops on leaves and stems, often in crowded, humid air even when foliage is not wet.", clues: { leaf_top: 1, canopy: 1, q_neighbors: 1, q_watering: 0 } },
-      { id: "black_spot", name: "Rose black spot", description: "Dark round leaf lesions with fringed edges and yellow halos commonly cause rose leaves to yellow and drop.", clues: { leaf_top: 2, fallen: 1, q_watering: 1, q_spacing: 0 } }
+      { id: "rose_rust", name: "Rose rust", description: "Orange rust pustules usually form beneath leaves, with yellow-orange spotting above and repeat infections in damp conditions.",
+        clues: { leaf_under: 4, leaf_top: 2, fallen: 2, canopy: 1, q_watering: 2, q_timing: 1, q_spacing: 1 }, keyClues: ["leaf_under"],
+        reasons: { leaf_under: "Orange underside pustules are a distinguishing sign of rust in this comparison." } },
+      { id: "powdery_mildew", name: "Powdery mildew", description: "A wipeable white coating develops on leaves and stems, often in crowded, humid air even when foliage is not wet.",
+        clues: { leaf_under: -4, leaf_top: -1, canopy: 1, q_spacing: 1 }, keyClues: [],
+        reasons: { leaf_under: "Orange pustules differ from the white surface coating typical of powdery mildew.", leaf_top: "Orange spotting is less typical than a white powdery coating; this alone does not exclude powdery mildew." } },
+      { id: "black_spot", name: "Rose black spot", description: "Dark round leaf lesions with fringed edges and yellow halos commonly cause rose leaves to yellow and drop.",
+        clues: { leaf_under: -4, leaf_top: -2, q_watering: 1, q_timing: 1 }, keyClues: [],
+        reasons: { leaf_under: "Powdery orange underside pustules are not the dark lesions typical of black spot.", leaf_top: "Yellow-orange spots differ from the dark, fringed lesions expected in black spot." } }
     ],
     diagnosisOptions: [
       { id: "rose_rust", label: "Rose rust" },
@@ -153,6 +173,7 @@ var CASES = {
     },
     maxQuestions: 3,
     customer: "Farmer Roots",
+    ownerQuote: "My seedlings have gone white.",
     portrait: { skin: "#c98f5e", hair: "#5b3b2d", shirt: "#47715a", accent: "#d9a94e", accessory: "hat" },
     intro: [
       "Doc, my squash seedlings have gone white!",
@@ -191,10 +212,24 @@ var CASES = {
       { id: "q_other", text: "Do any other plants show the same powder?",
         answer: "Only the ones packed closest together.", clue: "crowding" }
     ],
+    aiEvidence: {
+      powder_upper: { text: "White powder on upper leaves and stems", check: "upper leaf surface" },
+      // Existing gameplay IDs merge several acquisition routes. Describe them as
+      // alternatives, not as observations that the player necessarily made together.
+      not_wet: { text: "Dry-leaf history or a mostly clean underside recorded", check: "leaf surfaces and watering context" },
+      crowding: { text: "Crowding, still air, or symptoms concentrated among nearby plants recorded", check: "plant spacing" },
+      nitrogen: { text: "Heavy recent use of fast-acting fertilizer" }
+    },
     diseases: [
-      { id: "powdery_mildew", name: "Powdery mildew", description: "White powder coats upper leaves and stems; still humid air and excess nitrogen can favor it without prolonged leaf wetness.", clues: { powder_upper: 4, not_wet: 2, crowding: 2, nitrogen: 2 } },
-      { id: "downy_mildew", name: "Downy mildew", description: "Angular yellow patches and gray-purple growth below leaves are favored by cool, wet foliage and extended leaf wetness.", clues: { powder_upper: 0, not_wet: 1, crowding: 1 } },
-      { id: "alternaria_leaf_blight", name: "Alternaria leaf blight", description: "Brown leaf lesions often develop concentric target-like rings and spread under warm, wet conditions.", clues: { powder_upper: 0, not_wet: 1 } }
+      { id: "powdery_mildew", name: "Powdery mildew", description: "White powder coats upper leaves and stems; still humid air and excess nitrogen can favor it without prolonged leaf wetness.",
+        clues: { powder_upper: 4, not_wet: 1, crowding: 1, nitrogen: 1 }, keyClues: ["powder_upper"],
+        reasons: { powder_upper: "White powder on upper leaves and stems is a distinguishing sign in this comparison.", not_wet: "A dry-leaf history or mostly clean underside is compatible with powdery mildew, but neither establishes the diagnosis alone.", nitrogen: "Heavy feeding can favor susceptible growth. The fertilizer composition was not established, so this is only a weak contextual clue." } },
+      { id: "downy_mildew", name: "Downy mildew", description: "Angular yellow patches and gray-purple growth below leaves are favored by cool, wet foliage and extended leaf wetness.",
+        clues: { powder_upper: -4, not_wet: -1, crowding: 1 }, keyClues: [],
+        reasons: { powder_upper: "White upper-surface powder differs from the typical gray-purple underside growth of downy mildew.", not_wet: "A dry-leaf history or mostly clean underside provides limited evidence against the wet-leaf, underside-growth pattern; it does not rule the disease out." } },
+      { id: "alternaria_leaf_blight", name: "Alternaria leaf blight", description: "Brown leaf lesions often develop concentric target-like rings and spread under warm, wet conditions.",
+        clues: { powder_upper: -4, crowding: 1 }, keyClues: [],
+        reasons: { powder_upper: "A white powdery coating differs from the brown target-like lesions expected in Alternaria blight." } }
     ],
     diagnosisOptions: [
       { id: "powdery_mildew", label: "Powdery mildew" },
@@ -281,6 +316,7 @@ var CASES = {
     },
     maxQuestions: 4,
     customer: "Chef Sage",
+    ownerQuote: "My basil looks pale and bruised.",
     portrait: { skin: "#bd7d58", hair: "#332b2a", shirt: "#744b78", accent: "#f0eee0", accessory: "chef" },
     intro: [
       "My basil looks pale and bruised, but I cannot find white powder on top.",
@@ -322,10 +358,26 @@ var CASES = {
       { id: "q_flavor", text: "Has the basil flavor changed?",
         answer: "I have not tasted the affected leaves.", clue: null }
     ],
+    aiEvidence: {
+      angular_yellow: { text: "Yellow patches bounded by veins", check: "upper leaf pattern" },
+      downy_under: { text: "Gray-purple fuzzy growth along underside veins" },
+      curled_margin: { text: "Curled leaf margins with dark dead tissue", check: "leaf margins" },
+      dense_canopy: { text: "Dense canopy trapping humid air", check: "canopy spacing" },
+      night_humidity: { text: "Morning condensation and prolonged leaf dampness" },
+      late_overhead: { text: "Late overhead watering keeps leaves wet overnight" },
+      spreading_basil: { text: "Symptoms spread to neighboring basil" },
+      not_powdery: { text: "Owner reports no white upper-surface coating" }
+    },
     diseases: [
-      { id: "basil_downy_mildew", name: "Downy mildew", description: "Basil develops angular yellow areas above and gray-purple sporulation below, especially after humid nights and late overhead watering.", clues: { angular_yellow: 3, downy_under: 4, curled_margin: 1, dense_canopy: 1, night_humidity: 2, late_overhead: 2, spreading_basil: 1, not_powdery: 2 } },
-      { id: "powdery_mildew", name: "Powdery mildew", description: "A white, wipeable powder appears mainly on upper surfaces; unlike downy mildew, it does not create gray-purple underside growth.", clues: { dense_canopy: 1, night_humidity: 1 } },
-      { id: "basil_fusarium_wilt", name: "Basil Fusarium wilt", description: "Plants wilt and yellow as the vascular system browns, often starting unevenly rather than as angular leaf patches.", clues: { angular_yellow: 1, curled_margin: 1 } }
+      { id: "basil_downy_mildew", name: "Downy mildew", description: "Basil develops angular yellow areas above and gray-purple sporulation below, especially after humid nights and late overhead watering.",
+        clues: { angular_yellow: 3, downy_under: 4, curled_margin: 1, dense_canopy: 1, night_humidity: 2, late_overhead: 2, spreading_basil: 1, not_powdery: 1 }, keyClues: ["downy_under"],
+        reasons: { downy_under: "Gray-purple underside sporulation is a distinguishing sign of downy mildew in this comparison." } },
+      { id: "powdery_mildew", name: "Powdery mildew", description: "A white, wipeable powder appears mainly on upper surfaces; unlike downy mildew, it does not create gray-purple underside growth.",
+        clues: { dense_canopy: 1, night_humidity: 1, downy_under: -4, not_powdery: -2 }, keyClues: [],
+        reasons: { downy_under: "Gray-purple underside growth is unlike the white powdery coating expected here.", not_powdery: "The owner did not find the white coating typical of powdery mildew; an interview alone cannot exclude it." } },
+      { id: "basil_fusarium_wilt", name: "Basil Fusarium wilt", description: "Plants wilt and yellow as the vascular system browns, often starting unevenly rather than as angular leaf patches.",
+        clues: { curled_margin: 1, angular_yellow: -2, downy_under: -4 }, keyClues: [],
+        reasons: { angular_yellow: "Vein-bounded leaf patches are less typical of vascular wilt.", downy_under: "Fusarium wilt does not explain the observed gray-purple leaf-underside sporulation." } }
     ],
     diagnosisOptions: [
       { id: "basil_downy_mildew", label: "Downy mildew" },
@@ -411,6 +463,7 @@ var CASES = {
     },
     maxQuestions: 4,
     customer: "Mr. Sprout",
+    ownerQuote: "The lower leaves are falling.",
     portrait: { skin: "#d8a06c", hair: "#6a442f", shirt: "#426d86", accent: "#78a85c", accessory: "cap" },
     intro: [
       "My tomato is losing leaves from the bottom upward.",
@@ -451,10 +504,26 @@ var CASES = {
       { id: "q_fertilizer_tomato", text: "Which fertilizer brand did you use?",
         answer: "A balanced garden fertilizer at the label rate.", clue: null }
     ],
+    aiEvidence: {
+      septoria_spots: { text: "Small pale-centered leaf spots with tiny black dots", check: "lower leaf surface" },
+      lower_progression: { text: "Spots progress from lower leaves upward", group: "progression", check: "lower and upper foliage" },
+      started_low: { text: "Owner reports symptoms began on the lowest leaves", group: "progression" },
+      soil_splash: { text: "Bare soil and visible mud splash", group: "splash", check: "soil surface" },
+      splash_history: { text: "Owner reports overhead watering and no mulch", group: "splash" },
+      clean_fruit: { text: "Fruit is unspotted despite leaf disease", group: "fruit", check: "fruit surface" },
+      fruit_clean: { text: "Owner reports unspotted fruit", group: "fruit" },
+      old_debris: { text: "Old tomato debris remained in the bed" }
+    },
     diseases: [
-      { id: "tomato_septoria", name: "Septoria leaf spot", description: "Many small circular leaf spots with pale centers and tiny black fruiting bodies start low and move upward after soil splash.", clues: { septoria_spots: 4, lower_progression: 3, soil_splash: 2, clean_fruit: 1, started_low: 2, splash_history: 2, old_debris: 1, fruit_clean: 1 } },
-      { id: "early_blight", name: "Early blight", description: "Larger brown lesions with concentric target rings usually begin on older lower foliage and can progress after wet weather.", clues: { lower_progression: 2, soil_splash: 1, started_low: 2, old_debris: 1 } },
-      { id: "bacterial_spot", name: "Bacterial spot", description: "Dark, water-soaked-looking spots may appear on foliage and fruit, especially after warm, wet weather and handling.", clues: { soil_splash: 1, splash_history: 1 } }
+      { id: "tomato_septoria", name: "Septoria leaf spot", description: "Many small circular leaf spots with pale centers and tiny black fruiting bodies start low and move upward after soil splash.",
+        clues: { septoria_spots: 4, lower_progression: 2, soil_splash: 1, clean_fruit: 1, started_low: 2, splash_history: 1, old_debris: 1, fruit_clean: 1 }, keyClues: ["septoria_spots"],
+        reasons: { septoria_spots: "Small pale-centered spots containing tiny black fruiting bodies distinguish this pattern from the listed look-alikes." } },
+      { id: "early_blight", name: "Early blight", description: "Larger brown lesions with concentric target rings usually begin on older lower foliage and can progress after wet weather.",
+        clues: { lower_progression: 2, soil_splash: 1, started_low: 2, splash_history: 1, old_debris: 1, septoria_spots: -4 }, keyClues: [],
+        reasons: { septoria_spots: "Small pale-centered spots with tiny black dots differ from the larger target-ring lesions typical of early blight." } },
+      { id: "bacterial_spot", name: "Bacterial spot", description: "Dark, water-soaked-looking spots may appear on foliage and fruit, especially after warm, wet weather and handling.",
+        clues: { soil_splash: 1, splash_history: 1, septoria_spots: -4, clean_fruit: -1, fruit_clean: -1 }, keyClues: [],
+        reasons: { septoria_spots: "The pale-centered spots with tiny black fruiting bodies are not the typical bacterial-spot lesion pattern.", clean_fruit: "Clean fruit weakens the leaf-and-fruit disease pattern, but does not exclude bacterial spot.", fruit_clean: "Reported clean fruit weakens the leaf-and-fruit disease pattern, but does not exclude bacterial spot." } }
     ],
     diagnosisOptions: [
       { id: "tomato_septoria", label: "Septoria leaf spot" },

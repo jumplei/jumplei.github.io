@@ -4,15 +4,30 @@ var PPC = PPC || {};
   var canvas = document.getElementById("game");
   var wrap = document.getElementById("game-wrap");
   var hoverId = null;
+  var zoomLayout = false;
+  var patientLayout = false;
 
   function resize() {
     var vw = window.innerWidth;
     var vh = window.innerHeight;
-    var scale = Math.min(vw / 800, vh / 450, 4);
+    var state = PPC.Game.getState();
+    zoomLayout = !!(state && state.zoom);
+    patientLayout = !!document.getElementById("patient-card");
+    // Match the phone card's CSS breakpoint. Reserve a strip for its contents
+    // and the dock so neither overlays the plant. Logical hotspot coordinates
+    // are unchanged: toLogical always uses the actual canvas rectangle.
+    var patientSpace = patientLayout && vw <= 640 && vh >= 560 ? 220 : 0;
+    // In phone zoom the patient card disappears, but the dock still needs its
+    // own space below the specimen so soil/lower-leaf hotspots remain clickable.
+    var dockSpace = zoomLayout && !patientSpace && vw <= 640 && vh >= 560 ? 82 : 0;
+    var headerSpace = !zoomLayout && Math.min(vw, vh * 800 / 450) <= 640 ? 136 : 0;
+    var scale = Math.min(vw / 800, Math.max(1, vh - headerSpace - patientSpace - dockSpace) / 450, 4);
     canvas.style.width = (800 * scale) + "px";
     canvas.style.height = (450 * scale) + "px";
+    canvas.style.marginTop = headerSpace + "px";
     wrap.style.width = (800 * scale) + "px";
-    wrap.style.height = (450 * scale) + "px";
+    wrap.style.height = (450 * scale + headerSpace + patientSpace + dockSpace) + "px";
+    wrap.classList.toggle("has-patient-strip", patientSpace > 0);
   }
 
   function toLogical(e) {
@@ -48,6 +63,9 @@ var PPC = PPC || {};
 
   function loop() {
     var s = PPC.Game.getState();
+    // Zoom/case changes can alter the phone's reserved UI strips without a
+    // browser resize event. Keep pointer geometry and visible foliage in sync.
+    if (zoomLayout !== !!(s && s.zoom) || patientLayout !== !!document.getElementById("patient-card")) resize();
     if (s) PPC.Game.tickEnter();
     if (s) PPC.Game.tickTimeCrunch();
     var phase = s ? s.phase : "menu";

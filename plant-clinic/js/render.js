@@ -17,6 +17,12 @@ PPC.Render = (function () {
   var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var timeCrunch = false;
   var emergencyRemaining = 180;
+  // Approved art is split into scenery and workbench; patient plants stay live.
+  var roomArt = typeof Image !== "undefined" ? new Image() : null;
+  var benchArt = typeof Image !== "undefined" ? new Image() : null;
+  if (roomArt) roomArt.src = "assets/clinic-room.png";
+  if (benchArt) benchArt.src = "assets/clinic-workbench.png";
+  function artReady() { return roomArt && benchArt && roomArt.complete && benchArt.complete && roomArt.naturalWidth && benchArt.naturalWidth; }
 
   function rect(x, y, w, h, color) {
     ctx.fillStyle = color;
@@ -86,6 +92,11 @@ PPC.Render = (function () {
   function setMouse(x, y) { mouse = (x === null || y === null) ? null : { x: x, y: y }; }
 
   function drawRoom() {
+    if (artReady()) {
+      ctx.drawImage(roomArt, 0, 0, W, H);
+      drawSign();
+      return;
+    }
     rect(0, 0, W, H, "#3a2a32");
     rect(0, 0, W, 112, "#e5cf9c");
     rect(0, 6, W, 4, "#f3dfaa");
@@ -116,7 +127,10 @@ PPC.Render = (function () {
     drawWindow();
     drawShelves();
     drawComputer();
+    ctx.save();
+    ctx.translate(36, -20); // The fallback room has a shelf at the artwork's sign position.
     drawSign();
+    ctx.restore();
   }
 
   function drawWindow() {
@@ -151,6 +165,10 @@ PPC.Render = (function () {
   }
 
   function drawCounter() {
+    if (artReady()) {
+      ctx.drawImage(benchArt, 0, 0, W, H);
+      return;
+    }
     rect(12, 145, W - 24, 43, "#895036");
     rect(12, 145, W - 24, 6, "#d08a50");
     rect(12, 151, W - 24, 3, "#6e3e2d");
@@ -178,11 +196,29 @@ PPC.Render = (function () {
   }
 
   function drawSign() {
-    rect(210, 8, 170, 20, "#5b382d");
-    rect(213, 11, 164, 14, "#37624c");
-    ctx.fillStyle = "#fff0bc";
-    ctx.font = "bold 6px monospace";
-    ctx.fillText("PIXEL PLANT CLINIC BY ETHAN LEI", 220, 21);
+    // Match design/clinic-concept-v01/render_concept.py in its 880x495 art
+    // coordinates. Keep the original frame, quiet margins and four brass pins;
+    // the sign is drawn live over clean plaster, not baked into the room PNG.
+    ctx.save();
+    ctx.scale(W / 880, H / 495);
+    ctx.translate(12, 0); // A little more breathing room beside the left shelf.
+    rect(386, 65, 106, 40, "#6d7455");
+    rect(383, 62, 106, 40, "#d3bc81");
+    rect(387, 66, 98, 32, "#31594a");
+    rect(390, 69, 92, 26, "#3f6753");
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "#efe3b7";
+    ctx.font = 'normal 10px Georgia, "Times New Roman", serif';
+    ctx.fillText("PLANT CLINIC", 436, 83);
+    ctx.fillStyle = "#c5d0a6";
+    ctx.font = 'normal 6px "Courier New", monospace';
+    ctx.fillText("OBSERVE · CARE", 436, 92);
+    // The concept's 2x2-pixel pins sit in the dark inset, not on the gold rim.
+    [[388, 67], [481, 67], [388, 96], [481, 96]].forEach(function (pin) {
+      rect(pin[0], pin[1], 2, 2, "#f3e0a4");
+    });
+    ctx.restore();
   }
 
   function drawPot() {
@@ -209,21 +245,23 @@ PPC.Render = (function () {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
-    polygon([
-      [0,0],[length*.12,-width*.55],[length*.32,-width],[length*.58,-width*.92],
-      [length*.8,-width*.55],[length,0],[length*.78,width*.58],[length*.55,width*.94],
-      [length*.3,width],[length*.1,width*.5]
-    ], "#294d35");
-    polygon([
-      [1,0],[length*.14,-width*.42],[length*.34,-width*.78],[length*.56,-width*.72],
-      [length*.76,-width*.43],[length*.9,0],[length*.75,width*.44],[length*.54,width*.73],
-      [length*.32,width*.78],[length*.13,width*.4]
-    ], shade);
-    line(1,0,length*.88,0,1,"#a6c676");
-    line(length*.3,0,length*.48,-width*.58,.55,"#7fac5c");
-    line(length*.3,0,length*.48,width*.58,.55,"#7fac5c");
-    line(length*.55,0,length*.7,-width*.42,.55,"#7fac5c");
-    line(length*.55,0,length*.7,width*.42,.55,"#7fac5c");
+    var edge = [
+      [0,0],[.1,-.4],[.17,-.35],[.2,-.7],[.28,-.57],[.32,-.9],
+      [.4,-.74],[.46,-1],[.53,-.8],[.61,-.95],[.66,-.7],[.75,-.74],
+      [.78,-.5],[.86,-.5],[.88,-.25],[1,0],[.88,.22],[.86,.44],
+      [.78,.42],[.74,.7],[.67,.6],[.6,.91],[.53,.77],[.45,.96],
+      [.39,.74],[.31,.87],[.27,.6],[.19,.67],[.16,.36],[.09,.4]
+    ];
+    polygon(edge.map(function (p) { return [p[0]*length,p[1]*width]; }), "#294d35");
+    polygon(edge.map(function (p) { return [p[0]*length*.96,p[1]*width*.84]; }), shade);
+    polygon([[1,0],[length*.32,-width*.64],[length*.53,-width*.72],[length*.85,0]],"#80af5e");
+    var vein = Math.max(.45,length*.024);
+    line(1,0,length*.93,0,vein,"#adca7c");
+    for (var v = .2; v < .75; v += .16) {
+      var reach = Math.sin(v * Math.PI) * width * .72;
+      line(length*v,0,length*(v+.14),-reach,vein*.55,"#9abb70");
+      line(length*v,0,length*(v+.14),reach,vein*.55,"#3f7842");
+    }
     if (spotStyle) {
       rustSpecks([
         [length*.28,-width*.42],[length*.42,width*.28],[length*.55,-width*.3],
@@ -234,36 +272,83 @@ PPC.Render = (function () {
     ctx.restore();
   }
 
-  function roseCompoundLeaf(cx, cy, angle, scale, spotStyle) {
+  function roseCompoundLeaf(cx, cy, angle, scale, spotStyle, bend) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(angle);
-    line(0,0,25*scale,0,2.2,"#294d35");
-    line(0,0,25*scale,0,.8,"#91b85d");
-    line(7*scale,0,6*scale,-3*scale,1.2,"#315d3b");
-    line(7*scale,0,6*scale,3*scale,1.2,"#315d3b");
-    line(14*scale,0,14*scale,-3*scale,1.2,"#315d3b");
-    line(14*scale,0,14*scale,3*scale,1.2,"#315d3b");
-    roseBlade(6*scale,-3*scale,-1.08,14*scale,5.5*scale,"#57964b",spotStyle);
-    roseBlade(6*scale,3*scale,1.08,14*scale,5.5*scale,"#65a752",spotStyle);
-    roseBlade(14*scale,-3*scale,-.78,15*scale,6*scale,"#4f8d4c",spotStyle);
-    roseBlade(14*scale,3*scale,.78,15*scale,6*scale,"#70ae55",spotStyle);
-    roseBlade(22*scale,0,0,17*scale,6.5*scale,"#609c4b",spotStyle);
+    // The rachis is a fine, bowed leaf axis, NOT another woody cane. Its width
+    // must scale with the leaf; the old constant 2.2px axes formed a rigid lattice.
+    bend = bend === undefined ? 4 : bend;
+    function node(x) { return [x*scale, bend*Math.pow(x/22,2)*scale]; }
+    curvedStem([node(0),node(6),node(14),node(22)],1.05*scale,.32*scale,"#4a7146","#85a863");
+    [[6,-1,14,5.5,"#57964b"],[6,1,14,5.5,"#65a752"],
+      [14,-1,15,6,"#4f8d4c"],[14,1,15,6,"#70ae55"]].forEach(function (leaf) {
+      var x = leaf[0], side = leaf[1], p = node(x);
+      var tangent = Math.atan(2*bend*x/(22*22));
+      var reach = 2.5*scale;
+      var tip = [p[0]-Math.sin(tangent)*reach*side,p[1]+Math.cos(tangent)*reach*side];
+      curvedStem([p,[(p[0]+tip[0])/2-scale*.45,(p[1]+tip[1])/2],tip],.65*scale,.28*scale,"#4a7146","#85a863");
+      roseBlade(tip[0],tip[1],tangent+side*(x===6 ? 1.08 : .78),leaf[2]*scale,leaf[3]*scale,leaf[4],spotStyle);
+    });
+    var tip = node(22);
+    roseBlade(tip[0],tip[1],Math.atan(2*bend/22),17*scale,6.5*scale,"#609c4b",spotStyle);
     ctx.restore();
   }
 
-  function roseBloom(cx, cy) {
+  // Tapered canes pass THROUGH their leaf nodes instead of connecting them with
+  // rigid straight rods. The same ribbon is used at room and inspection scales.
+  function curvedStem(nodes, baseWidth, tipWidth, dark, light) {
+    var points = [];
+    for (var i = 0; i < nodes.length - 1; i++) {
+      var a = nodes[Math.max(0, i - 1)], b = nodes[i];
+      var c = nodes[i + 1], d = nodes[Math.min(nodes.length - 1, i + 2)];
+      for (var j = 0; j < 8; j++) {
+        var t = j / 8, t2 = t * t, t3 = t2 * t;
+        points.push([0, 1].map(function (axis) {
+          return .5 * ((2 * b[axis]) + (-a[axis] + c[axis]) * t +
+            (2*a[axis] - 5*b[axis] + 4*c[axis] - d[axis]) * t2 +
+            (-a[axis] + 3*b[axis] - 3*c[axis] + d[axis]) * t3);
+        }));
+      }
+    }
+    points.push(nodes[nodes.length - 1]);
+    var left = [], right = [], litLeft = [], litRight = [];
+    points.forEach(function (p, i) {
+      var before = points[Math.max(0, i - 1)], after = points[Math.min(points.length - 1, i + 1)];
+      var dx = after[0] - before[0], dy = after[1] - before[1];
+      var length = Math.sqrt(dx*dx + dy*dy) || 1;
+      var nx = -dy / length, ny = dx / length;
+      var width = baseWidth + (tipWidth - baseWidth) * i / (points.length - 1);
+      left.push([p[0] + nx*width*.5, p[1] + ny*width*.5]);
+      right.push([p[0] - nx*width*.5, p[1] - ny*width*.5]);
+      litLeft.push([p[0] + nx*width*.27, p[1] + ny*width*.27]);
+      litRight.push([p[0] - nx*width*.06, p[1] - ny*width*.06]);
+    });
+    polygon(left.concat(right.reverse()), dark || "#355a3b");
+    polygon(litLeft.concat(litRight.reverse()), light || "#86a65b");
+  }
+
+  function roseBloom(cx, cy, scale, angle) {
     ctx.save();
     ctx.translate(cx, cy);
-    polygon([[-9, 0], [-7, -7], [-2, -10], [2, -10], [8, -6], [10, 0], [7, 7], [0, 10], [-7, 7]], "#6e2838");
-    rect(-7, -5, 6, 7, "#c94352");
-    rect(1, -6, 6, 7, "#df5360");
-    rect(-6, 2, 6, 5, "#e46467");
-    rect(1, 1, 7, 6, "#b9364b");
-    rect(-3, -3, 6, 7, "#f17c72");
-    rect(-1, -1, 3, 3, "#ffd27a");
-    rect(-8, 7, 5, 3, "#315d3b");
-    rect(4, 6, 5, 3, "#315d3b");
+    ctx.rotate(angle || 0);
+    ctx.scale(scale || 1, scale || 1);
+    // A cupped rose seen at three-quarter angle: irregular outer reflexed
+    // petals surround overlapping inward curls, not a circular spiral icon.
+    polygon([[-4,7],[-7,4],[-6,9],[-1,11],[4,9],[7,4],[2,7]],"#426440");
+    polygon([[-10,-2],[-9,-6],[-5,-8],[-1,-10],[4,-9],[6,-7],[10,-6],[12,-2],[10,3],[7,7],[2,9],[-4,8],[-8,5],[-11,1]],"#853748");
+    polygon([[-9,-3],[-8,-6],[-4,-8],[0,-9],[4,-8],[5,-5],[1,-3],[-4,-3],[-6,1]],"#d96970");
+    polygon([[-10,-1],[-6,-3],[-4,0],[-3,5],[1,7],[-4,7],[-8,4]],"#c95865");
+    polygon([[5,-6],[9,-5],[11,-2],[9,2],[6,4],[2,3],[5,0]],"#d9616a");
+    polygon([[-7,-5],[-4,-7],[0,-8],[3,-7],[0,-6],[-4,-5],[-5,-3]],"#f4a194");
+    polygon([[-5,-2],[-3,-5],[1,-6],[5,-4],[6,-1],[3,3],[-1,4],[-4,2]],"#a94356");
+    polygon([[-4,-2],[-2,-5],[1,-5],[4,-3],[4,0],[1,-1],[0,-3],[-2,-2]],"#ed8c85");
+    polygon([[-2,0],[0,-3],[3,-2],[3,1],[1,3],[-1,2]],"#c65c68");
+    polygon([[0,-2],[2,-1],[1,1],[-1,1]],"#91384e");
+    polygon([[-5,2],[-2,4],[2,4],[6,2],[8,0],[8,4],[5,7],[1,8],[-3,6]],"#e7837e");
+    polygon([[-4,2],[-1,3],[3,3],[6,1],[5,3],[2,5],[-1,5]],"#f2a395");
+    polygon([[-9,0],[-7,2],[-5,3],[-4,5],[-7,4]],"#ee9289");
+    line(7,-4,9,-2,.8,"#f0a08f");
     ctx.restore();
   }
 
@@ -280,29 +365,44 @@ PPC.Render = (function () {
   }
 
   function drawRosePlant(visual) {
-    line(199,134,199,66,6,"#294d35");
-    line(199,134,199,66,2.5,"#668b4e");
-    line(198,118,182,98,4,"#294d35");
-    line(182,98,176,79,3,"#294d35");
-    line(200,97,220,84,4,"#294d35");
-    line(220,84,231,76,3,"#294d35");
-    line(199,88,211,82,2.5,"#315d3b");
-    polygon([[198,111],[192,108],[198,116]],"#315d3b");
-    polygon([[200,101],[206,98],[200,106]],"#315d3b");
-    polygon([[185,96],[190,92],[186,101]],"#315d3b");
     var spot = visual && visual.spots ? { color: visual.spotColor, color2: visual.spotColor2 } : null;
-    roseCompoundLeaf(198,119,2.92,.88,spot);
-    roseCompoundLeaf(201,112,.08,.9,null);
-    roseCompoundLeaf(198,103,2.95,.94,spot);
-    roseCompoundLeaf(201,95,-.18,.94,spot);
-    roseCompoundLeaf(182,98,2.72,.76,spot);
-    roseCompoundLeaf(211,82,-.12,.72,null);
-    roseCompoundLeaf(198,80,2.9,.7,null);
-    rustSpecks([[175,90],[178,92],[181,89]], visual.spotColor, visual.spotColor2);
-    rustSpecks([[223,87],[226,89],[229,86]], visual.spotColor, visual.spotColor2);
-    roseBloom(199,63);
-    roseBloom(176,78);
-    roseBud(231,70,.35);
+    // Keep all 18 compound leaves (90 leaflets), but separate their depth.
+    // Inner leaves sit BEHIND the canes; adding density must not bury the
+    // approved branch silhouette or introduce straight, equally thick rails.
+    roseCompoundLeaf(187,118,-2.3,.70,null,5);
+    roseCompoundLeaf(190,107,-.45,.73,spot,-4);
+    roseCompoundLeaf(200,102,2.05,.67,null,4);
+    roseCompoundLeaf(208,119,-1.28,.74,null,-5);
+    roseCompoundLeaf(216,108,.18,.70,null,6);
+    roseCompoundLeaf(196,89,-.82,.57,null,-4);
+    roseCompoundLeaf(197,129,-1.94,.67,spot,5);
+    roseCompoundLeaf(198,134,-.6,.61,null,4);
+
+    // Unchanged woody architecture, now readable in front of the rear foliage.
+    curvedStem([[198,134],[195,119],[200,102],[196,89],[194,79]],3.4,1.1);
+    curvedStem([[197,129],[187,118],[179,108],[175,94],[168,85]],2.9,.9);
+    curvedStem([[199,132],[208,119],[216,108],[220,94],[230,85]],3.1,.9);
+    curvedStem([[195,119],[190,107],[187,94],[188,86]],2.1,.6);
+    curvedStem([[208,119],[219,120],[230,111],[236,103]],2,.6);
+    curvedStem([[168,85],[167,80],[163,76]],1.3,.65);
+    polygon([[195,119],[191,115],[194,115]],"#597143");
+    polygon([[215,109],[220,107],[217,112]],"#597143");
+    polygon([[178,105],[174,102],[176,107]],"#597143");
+
+    // Outer leaves face away from the cane paths rather than forming crossbars.
+    roseCompoundLeaf(179,108,3.18,.67,null,-5);
+    roseCompoundLeaf(175,94,3.88,.63,null,4);
+    roseCompoundLeaf(196,89,3.37,.63,null,-3);
+    roseCompoundLeaf(200,102,-.79,.65,null,4);
+    roseCompoundLeaf(219,120,.30,.84,null,-5);
+    roseCompoundLeaf(230,111,-.49,.61,null,5);
+    roseCompoundLeaf(187,94,3.38,.78,spot,-4);
+    roseCompoundLeaf(220,94,-.48,.76,spot,-4);
+    roseCompoundLeaf(195,119,2.7,.85,spot,5);
+    roseCompoundLeaf(198,130,2.48,.57,spot,-4);
+    roseBloom(193,71,1.08,-.18);
+    roseBloom(232,80,.76,.24);
+    roseBud(161,70,-.35);
     ctx.save();
     ctx.translate(188, 128);
     ctx.rotate(-.25);
@@ -313,39 +413,50 @@ PPC.Render = (function () {
     drawPot();
   }
 
+  // One-logical-pixel grains stay fine when leaf geometry gets larger.
+  function powderPatch(x, y, rx, ry, seed) {
+    for (var py = -Math.ceil(ry); py <= ry; py++) {
+      for (var px = -Math.ceil(rx); px <= rx; px++) {
+        var d = px*px/(rx*rx) + py*py/(ry*ry);
+        var grain = ((px+41)*17 + (py+53)*29 + seed*13) % 19;
+        if (d < .65 || (d < 1.15 && grain < 7)) {
+          rect(x+px,y+py,1,1,grain < 6 ? "#fff9e8" : grain < 13 ? "#e8e3cd" : "#bbc3a1");
+        }
+      }
+    }
+  }
+
   function squashLeaf(cx, cy, rx, ry, angle, powderStyle) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(angle);
     var outline = [
-      [-rx, 0], [-rx * .72, -ry * .25], [-rx * .82, -ry * .7],
-      [-rx * .38, -ry * .58], [0, -ry], [rx * .34, -ry * .58],
-      [rx * .82, -ry * .72], [rx * .7, -ry * .23], [rx, 0],
-      [rx * .66, ry * .2], [rx * .76, ry * .7], [rx * .3, ry * .55],
-      [0, ry], [-rx * .3, ry * .55], [-rx * .76, ry * .7], [-rx * .66, ry * .2]
+      [-rx,0],[-rx*.86,-ry*.2],[-rx*.57,-ry*.24],[-rx*.77,-ry*.68],
+      [-rx*.55,-ry*.8],[-rx*.29,-ry*.49],[-rx*.2,-ry*.84],[0,-ry],
+      [rx*.18,-ry*.82],[rx*.3,-ry*.46],[rx*.57,-ry*.82],[rx*.8,-ry*.64],
+      [rx*.58,-ry*.23],[rx*.88,-ry*.18],[rx,0],[rx*.82,ry*.3],
+      [rx*.52,ry*.3],[rx*.62,ry*.64],[rx*.36,ry*.82],[rx*.11,ry*.69],
+      [0,ry*.94],[-rx*.13,ry*.66],[-rx*.37,ry*.82],[-rx*.64,ry*.61],
+      [-rx*.51,ry*.3],[-rx*.82,ry*.28]
     ];
     polygon(outline, "#294d35");
-    polygon(outline.map(function (p) { return [p[0] * .88, p[1] * .82]; }), "#57964b");
-    polygon([[0, 0], [-rx * .7, -ry * .12], [-rx * .42, ry * .15]], "#69a653");
-    polygon([[0, 0], [rx * .68, -ry * .14], [rx * .4, ry * .16]], "#72ad56");
-    line(0, ry * .75, 0, -ry * .75, 1.2, "#b7d486");
-    line(0, 0, rx * .66, -ry * .53, .8, "#a7c978");
-    line(0, 0, -rx * .66, -ry * .52, .8, "#a7c978");
-    line(0, ry * .18, rx * .58, ry * .5, .8, "#9fc173");
-    line(0, ry * .18, -rx * .58, ry * .5, .8, "#9fc173");
-    rect(-rx * .28, -ry * .35, 2, 2, "#83b965");
-    rect(rx * .38, ry * .25, 2, 2, "#3f7b42");
+    polygon(outline.map(function (p) { return [p[0]*.92,p[1]*.89]; }), "#57964b");
+    polygon([[0,ry*.6],[-rx*.57,-ry*.56],[-rx*.26,-ry*.38],[0,-ry*.88]],"#6fa552");
+    polygon([[0,ry*.6],[rx*.68,-ry*.51],[rx*.42,-ry*.09],[rx*.62,ry*.49]],"#447e42");
+    var vein = Math.max(.7,rx*.036);
+    line(0,ry*.78,0,-ry*.85,vein,"#b7d486");
+    [-1,1].forEach(function (side) {
+      line(0,ry*.45,side*rx*.61,-ry*.61,vein*.65,"#a7c978");
+      line(0,ry*.45,side*rx*.86,0,vein*.6,"#9fc173");
+      line(0,ry*.45,side*rx*.4,ry*.65,vein*.6,"#9fc173");
+      for (var v = 1; v < 4; v++) {
+        line(side*rx*v*.12,ry*(.45-v*.18),side*rx*(v*.12+.18),ry*(.37-v*.18),vein*.35,"#79a85d");
+      }
+    });
     if (powderStyle) {
-      ctx.globalAlpha = .9;
-      rect(-rx * .38, -ry * .42, rx * .34, ry * .3, powderStyle.color2);
-      rect(-rx * .2, -ry * .5, rx * .34, ry * .42, powderStyle.color);
-      rect(rx * .16, -ry * .18, rx * .4, ry * .35, powderStyle.color2);
-      rect(-rx * .06, ry * .12, rx * .34, ry * .3, powderStyle.color);
-      var dust = [[-.42,-.2],[-.25,-.55],[-.08,-.3],[.12,-.42],[.3,-.15],[.48,.12],[-.3,.28],[.05,.42]];
-      dust.forEach(function (p, i) {
-        rect(p[0] * rx, p[1] * ry, i % 3 === 0 ? 3 : 2, i % 2 === 0 ? 2 : 3, i % 2 ? "#fffdf0" : "#e9e3cf");
+      [[-.32,-.29,.2,.19],[.06,-.44,.23,.18],[.37,-.01,.19,.21],[-.1,.29,.2,.17]].forEach(function (p, i) {
+        powderPatch(p[0]*rx,p[1]*ry,p[2]*rx,p[3]*ry,i);
       });
-      ctx.globalAlpha = 1;
     }
     ctx.restore();
   }
@@ -364,11 +475,23 @@ PPC.Render = (function () {
   }
 
   function drawSquashPlant(visual) {
-    var crown = [199,132];
-    var stems = [[206,92],[236,112],[168,110],[186,76],[222,70],[151,88],[250,84],[159,126],[244,130],[174,91],[229,92]];
-    stems.forEach(function (s, i) {
-      line(crown[0],crown[1],s[0],s[1],i < 5 ? 5 : 3.5,"#315d3b");
-      line(crown[0],crown[1],s[0],s[1],i < 5 ? 2 : 1.3,"#83ad5f");
+    // Petioles emerge from different crown nodes, rise, then bow under broad
+    // leaves. Keep blade positions/shapes, but remove the rigid umbrella ribs.
+    var petioles = [
+      [[199,133],[203,120],[210,105],[206,92]],
+      [[203,132],[213,120],[226,114],[236,112]],
+      [[197,134],[185,125],[179,114],[168,110]],
+      [[198,131],[190,118],[187,96],[186,76]],
+      [[201,131],[208,113],[215,88],[222,70]],
+      [[195,133],[183,117],[166,98],[151,88]],
+      [[204,132],[219,110],[237,93],[250,84]],
+      [[195,133],[184,122],[169,122],[159,126]],
+      [[204,133],[216,125],[232,125],[244,130]],
+      [[197,131],[187,113],[181,98],[174,91]],
+      [[201,132],[213,117],[223,100],[229,92]]
+    ];
+    petioles.forEach(function (nodes, i) {
+      curvedStem(nodes, i < 5 ? 3.1 : 2.3, 1.1, "#315d3b", "#83ad5f");
     });
     var p = visual && visual.powder ? { color: visual.powderColor, color2: visual.powderColor2 } : null;
     squashLeaf(186,76,23,15,-.05,p);
@@ -401,36 +524,45 @@ PPC.Render = (function () {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(angle);
-    polygon([[0,0],[5*scale,-7*scale],[15*scale,-9*scale],[24*scale,-5*scale],[29*scale,0],[24*scale,5*scale],[15*scale,9*scale],[5*scale,7*scale]], "#274b32");
-    polygon([[1*scale,0],[6*scale,-6*scale],[15*scale,-8*scale],[23*scale,-4*scale],[27*scale,0],[23*scale,4*scale],[15*scale,8*scale],[6*scale,6*scale]], underside ? "#71865b" : "#4d9648");
-    line(1, 0, 25 * scale, 0, 1, underside ? "#aab48a" : "#a5ca75");
-    for (var i = 6; i < 23; i += 5) {
-      line(i * scale, 0, (i + 4) * scale, -4 * scale, .6, underside ? "#899674" : "#76ad5c");
-      line(i * scale, 0, (i + 4) * scale, 4 * scale, .6, underside ? "#899674" : "#76ad5c");
-    }
+    ctx.scale(scale,scale);
+    polygon([[0,0],[3,-4],[7,-7],[13,-9],[19,-8],[24,-5],[29,0],[25,3],[21,6],[14,8],[8,7],[3,4]],"#274b32");
+    polygon([[1,0],[5,-4],[9,-6],[14,-7],[20,-6],[25,-3],[27,0],[22,4],[15,6],[8,5],[4,2]],underside ? "#82926a" : "#53984c");
+    polygon([[2,0],[7,-5],[14,-7],[20,-6],[25,-3],[18,-3],[12,-4],[7,-2]],underside ? "#9ca57a" : "#8bb969");
+    polygon([[3,1],[9,5],[15,6],[22,4],[27,0],[24,4],[20,6],[14,7],[7,5]],underside ? "#637b54" : "#326d3d");
     if (diseased) {
-      polygon([[8*scale,-5*scale],[14*scale,-6*scale],[17*scale,-1*scale],[13*scale,1*scale],[7*scale,0]], underside ? "#6c6270" : "#b4ad5d");
-      polygon([[17*scale,1*scale],[23*scale,0],[24*scale,4*scale],[20*scale,6*scale],[16*scale,4*scale]], underside ? "#584e61" : "#9e914b");
-      if (mode === "zoom") {
-        var fuzz = [[10,-3],[12,-1],[15,-4],[18,2],[20,4],[22,1]];
-        fuzz.forEach(function (p) { rect(p[0]*scale,p[1]*scale,1.5,1.5, underside ? "#8d8291" : "#65515d"); });
+      polygon([[7,-.7],[11,-4.7],[15,-5.5],[12,-.8]],underside ? "#728060" : "#c5bf69");
+      polygon([[12.8,-.7],[16.2,-5.4],[20,-4],[17.5,-.7]],underside ? "#758461" : "#bab360");
+      polygon([[13.2,.8],[17,4.8],[21,3.5],[18,.8]],underside ? "#6c7b59" : "#a9a252");
+    }
+    line(1,0,26,0,.55,underside ? "#c1c59a" : "#b9d28a");
+    for (var i = 6; i < 23; i += 5) {
+      var reach = i > 18 ? 2.7 : 5;
+      line(i,0,i+4,-reach,.3,underside ? "#b0b98d" : "#87b568");
+      line(i,0,i+4,reach*.85,.3,underside ? "#b0b98d" : "#87b568");
+    }
+    // Only the flipped, separately composed specimen may show this sign.
+    if (diseased && underside && mode === "specimen") {
+      for (var f = 0; f < 62; f++) {
+        var vx = 7+(f%16)*.9;
+        var vy = (f%2 ? -1 : 1)*(1+((f*7)%23)/7);
+        line(vx,vy,vx+.25,vy-.55,.18,f%3 ? "#817585" : "#b0a1af");
+        line(vx,vy,vx-.3,vy-.2,.2,"#66596f");
       }
-      rect(24*scale,-2*scale,4*scale,4*scale,"#65413f");
     }
     ctx.restore();
   }
 
   function drawBasilPlant(visual) {
-    line(198,134,198,66,6,"#315d3b");
-    line(198,134,198,66,2.5,"#7eab61");
-    line(198,116,181,98,4,"#315d3b");
-    line(181,98,174,77,3,"#315d3b");
-    line(198,115,216,96,4,"#315d3b");
-    line(216,96,228,74,3,"#315d3b");
-    line(198,126,177,118,3,"#315d3b");
-    line(198,126,222,119,3,"#315d3b");
-    line(198,91,184,79,3,"#315d3b");
-    line(198,91,212,78,3,"#315d3b");
+    // Basil stays upright, with short, subtly offset internodes and opposite
+    // leaf pairs. It should not inherit the rose's spreading woody-cane habit.
+    curvedStem([[198,134],[198,122],[196,108],[198,91],[196,79],[198,68]],3.2,.85,"#315d3b","#7eab61");
+    curvedStem([[197,116],[187,109],[181,98],[178,86],[174,77]],2.35,.7);
+    curvedStem([[196,108],[208,105],[216,96],[221,82],[228,74]],2.15,.7);
+    curvedStem([[198,122],[187,118],[177,118]],1.7,.6);
+    curvedStem([[198,122],[210,116],[222,119]],1.8,.6);
+    curvedStem([[198,91],[190,86],[184,79]],1.5,.5);
+    curvedStem([[198,91],[206,88],[212,78]],1.45,.5);
+    curvedStem([[196,108],[198,107],[200,108]],1,.6);
     basilLeaf(198,122,3.02,.95,true,false);
     basilLeaf(198,122,.08,.95,false,false);
     basilLeaf(196,108,3.0,.9,true,false);
@@ -453,11 +585,16 @@ PPC.Render = (function () {
     basilLeaf(198,68,-.45,.48,false,false);
     polygon([[174,85],[181,83],[185,88],[180,93],[174,91]], "#b4ad5d");
     rect(177,87,3,2,"#7f7045");
-    rect(235,88,6,5,"#66596f");
-    if (mode === "zoom") {
-      rect(236,87,2,2,"#94889a"); rect(240,91,2,2,"#4c4453"); rect(238,94,1,2,"#94889a");
-    }
-    rect(229,78,5,4,"#65413f");
+    // The shaded leaf is not a revealed underside: inspection owns that sign.
+    polygon([[233,88],[237,85],[243,88],[239,92],[235,92]],"#9f9c58");
+    // Follow the older leaf's lower edge rather than floating a square beside it.
+    ctx.save();
+    ctx.translate(228,74);
+    ctx.rotate(.1);
+    ctx.scale(.68,.68);
+    polygon([[8,5],[14,6],[21,4],[27,0],[25,3],[21,6],[14,8],[8,7]],"#70533b");
+    line(14,7,21,5,.7,"#b09159");
+    ctx.restore();
     rect(194, 116, 5, 4, "#405f36");
     rect(191, 119, 4, 3, "#6d8744");
     drawPot();
@@ -465,51 +602,63 @@ PPC.Render = (function () {
 
   function septoriaLesions(points, color, center) {
     points.forEach(function (p, i) {
-      rect(p[0]-2,p[1]-2,5,5,"#544031");
-      rect(p[0]-1,p[1]-1,3,3,color);
-      rect(p[0],p[1],1,1,center);
-      if (mode === "zoom" && i % 2 === 0) rect(p[0]+1,p[1],1,1,"#211c19");
+      var x=p[0], y=p[1];
+      // Small lesions belong inside a leaflet; the dedicated plate carries the fine detail.
+      polygon([[x-.6,y-1.2],[x+.6,y-1.2],[x+1.2,y-.6],[x+1.2,y+.6],[x+.6,y+1.2],[x-.6,y+1.2],[x-1.2,y+.6],[x-1.2,y-.6]],"#544031");
+      rect(x-.6,y-.6,1.2,1.2,center || "#c6ad75");
+      if ((mode === "zoom" || mode === "specimen") && i%2 === 0) rect(x,y,.5,.5,"#29271f");
     });
   }
 
-  function tomatoLeaflet(cx, cy, w, h, angle) {
+  function tomatoLeaflet(cx, cy, w, h, angle, yellow) {
     ctx.save();
-    ctx.translate(cx, cy);
+    ctx.translate(cx,cy);
     ctx.rotate(angle);
-    polygon([[0,0],[w*.4,-h*.5],[w*.8,-h*.3],[w,-h*.05],[w*.75,h*.25],[w*.4,h*.15],[0,h*.05]],"#356835");
-    polygon([[w*.05,0],[w*.35,-h*.38],[w*.7,-h*.22],[w*.85,-h*.02],[w*.65,h*.15],[w*.38,h*.12],[w*.05,h*.02]],"#509a49");
-    line(0,0,w*.85,0,.8,"#a5d27c");
+    var edge = [[0,0],[.12,-.23],[.21,-.16],[.25,-.52],[.36,-.37],[.41,-.68],
+      [.5,-.43],[.59,-.59],[.65,-.33],[.77,-.38],[.8,-.18],[1,0],
+      [.83,.14],[.77,.33],[.66,.26],[.6,.52],[.51,.38],[.42,.62],
+      [.34,.34],[.24,.43],[.2,.17],[.11,.23]];
+    polygon(edge.map(function (p) { return [p[0]*w,p[1]*h]; }),"#32553a");
+    polygon(edge.map(function (p) { return [p[0]*w*.97,p[1]*h*.83]; }),yellow ? "#aaa55b" : "#569548");
+    polygon([[w*.07,0],[w*.28,-h*.32],[w*.45,-h*.44],[w*.78,0]],yellow ? "#c9bc69" : "#7bac58");
+    var vein = Math.max(.4,w*.018);
+    line(0,0,w*.91,0,vein,yellow ? "#d5c781" : "#b2c97a");
+    for (var v=.2;v<.8;v+=.17) {
+      line(w*v,0,w*(v+.1),-h*Math.sin(v*Math.PI)*.37,vein*.5,"#94b56b");
+      line(w*v,0,w*(v+.1),h*Math.sin(v*Math.PI)*.34,vein*.5,"#426e40");
+    }
     ctx.restore();
   }
 
   function patiotomatoLeaf(cx, cy, angle, scale, diseased, visual) {
     ctx.save();
-    ctx.translate(cx, cy);
+    ctx.translate(cx,cy);
     ctx.rotate(angle);
-    line(0,0,14*scale,0,1.8,"#386840");
-    var s = scale;
-    tomatoLeaflet(4*s, 0, 13*s, 6*s, -.48);
-    tomatoLeaflet(4*s, 0, 13*s, 6*s, .42);
-    tomatoLeaflet(6.5*s, -.5*s, 12*s, 5.5*s, -.34);
-    tomatoLeaflet(6.5*s, .5*s, 12*s, 5.5*s, .38);
-    tomatoLeaflet(9*s, 0, 11*s, 5*s, -.22);
-    tomatoLeaflet(9*s, 0, 11*s, 5*s, .18);
-    tomatoLeaflet(11.5*s, -.2*s, 9*s, 4.5*s, -.08);
-    tomatoLeaflet(11.5*s, .2*s, 9*s, 4.5*s, .1);
-    tomatoLeaflet(13.5*s, 0, 8*s, 4*s, 0);
+    var s=scale;
+    line(0,0,18*s,0,1.2,"#386840");
+    tomatoLeaflet(4*s,0,11*s,7*s,-.95,diseased);
+    tomatoLeaflet(5*s,0,11*s,7*s,.95,diseased);
+    tomatoLeaflet(11*s,0,11*s,7*s,-.72,diseased);
+    tomatoLeaflet(11*s,0,11*s,7*s,.72,diseased);
+    tomatoLeaflet(17*s,0,10*s,6*s,0,diseased);
     if (diseased) {
-      septoriaLesions([[9*s,-1.5*s],[13*s,1*s],[16*s,-1.2*s],[20*s,.6*s]], visual.lesionColor, visual.centerColor);
+      septoriaLesions([[9*s,-4*s],[10*s,4*s],[17*s,-4*s],[22*s,0]],visual.lesionColor,visual.centerColor);
     }
     ctx.restore();
   }
 
   function patiotomatoFruit(cx, cy, r, ripe) {
-    line(cx,cy-r+2,cx-2,cy-r-4,2,"#386840");
-    fill_ellipse(cx, cy, r, r, ripe ? "#a73535" : "#38663c");
-    fill_ellipse(cx, cy+1, r-1, r-1, ripe ? "#d94d45" : "#6daf54");
-    rect(cx-r*.4, cy-r*.4, 2, 3, ripe ? "#f07b58" : "#a8cc78");
-    polygon([[cx,cy-r+2],[cx-4,cy-r],[cx-1,cy-r+3],[cx+3,cy-r],[cx+1,cy-r+2]],"#386840");
-    if (ripe) rect(cx+1,cy-r*.3,1.5,2,"#ffd97a");
+    ctx.save();
+    ctx.translate(cx,cy);
+    var rim=[[-.85,-.42],[-.5,-.83],[-.15,-.94],[.14,-.86],[.48,-.87],[.83,-.51],[1,-.08],[.9,.48],[.54,.83],[.08,.96],[-.45,.82],[-.84,.46],[-1,0]];
+    polygon(rim.map(function (p) { return [p[0]*r,p[1]*r]; }),ripe ? "#963a32" : "#3f6540");
+    polygon(rim.map(function (p) { return [p[0]*r*.9-.04*r,p[1]*r*.87]; }),ripe ? "#d65a43" : "#7aa855");
+    polygon([[-r*.74,-r*.25],[-r*.46,-r*.66],[-r*.12,-r*.72],[r*.27,-r*.56],[r*.49,-r*.1],[r*.23,r*.37],[-r*.4,r*.33]],ripe ? "#e97451" : "#97bc6a");
+    line(-r*.38,-r*.44,-r*.13,-r*.53,Math.max(.6,r*.09),ripe ? "#f5ad74" : "#c0d391");
+    line(0,-r*.77,-r*.12,-r*1.4,Math.max(1,r*.15),"#496b40");
+    polygon([[0,-r*.82],[-r*.57,-r*.98],[-r*.3,-r*.67],[-r*.54,-r*.42],[-r*.08,-r*.6],[r*.22,-r*.38],[r*.2,-r*.72],[r*.61,-r*.73],[r*.24,-r*.94]],"#3b603a");
+    line(-r*.29,-r*.84,0,-r*.75,Math.max(.5,r*.06),"#8fba65");
+    ctx.restore();
   }
 
   function patiotomatoFlower(cx, cy) {
@@ -523,21 +672,41 @@ PPC.Render = (function () {
   }
 
   function drawTomatoPlant(visual) {
-    line(199,134,200,66,6,"#386840");
-    line(199,134,200,66,2.5,"#7aad59");
-    line(200,118,170,108,3.5,"#386840");
-    line(170,108,160,98,2.5,"#386840");
-    line(200,114,228,104,3.5,"#386840");
-    line(228,104,246,98,2.5,"#386840");
-    line(200,101,180,86,3,"#386840");
-    line(200,97,223,82,3,"#386840");
-    line(200,113,165,114,2.8,"#386840");
-    line(200,103,234,84,2.8,"#386840");
-    line(200,86,168,82,2.5,"#386840");
-    line(200,75,242,66,2.5,"#386840");
-    line(200,82,192,72,2.5,"#386840");
-    line(200,78,209,70,2.5,"#386840");
-    line(200,74,199,64,2,"#386840");
+    // Soft tomato stems change direction at nodes. Lower branches sag slightly;
+    // young tips turn upward, and fruit trusses join above the hanging fruit.
+    curvedStem([[199,134],[200,121],[197,109],[200,101],[196,90],[200,82],[204,73],[199,64]],4,.9,"#386840","#7aad59");
+    var branches = [
+      [[197,109],[184,113],[170,108],[168,99],[160,98]],
+      [[200,121],[189,124],[178,121],[165,114],[151,111]],
+      [[197,109],[211,113],[228,104],[233,96],[246,98]],
+      [[211,113],[221,120],[235,118],[247,110]],
+      [[200,101],[190,93],[180,86],[174,86],[168,82]],
+      [[200,101],[213,93],[223,82],[226,84],[234,84]],
+      [[200,82],[192,78],[192,72],[183,73]],
+      [[204,73],[217,71],[231,71],[242,66]],
+      [[204,73],[209,70],[212,73],[215,78]],
+      [[196,90],[194,89],[193,91]],
+      [[200,82],[206,85],[207,89]]
+    ];
+    branches.forEach(function (nodes, i) { curvedStem(nodes, i < 6 ? 2.25 : 1.6, .6, "#386840", "#83ad62"); });
+    curvedStem([[200,82],[208,72],[219.3,75.6]],1.45,.6);
+    curvedStem([[192,72],[187,73],[183.4,76]],1.25,.6);
+    curvedStem([[242,66],[243,70],[240,72]],1.1,.5);
+    curvedStem([[200,101],[204,100],[207,104]],1.2,.5);
+    // Fill the crown between branch tips instead of implying widespread leaf
+    // loss. Old lower foliage stays spotted; the upper crown is mostly green.
+    patiotomatoLeaf(184,113,-1.2,.82,true,visual);
+    patiotomatoLeaf(189,124,-1.18,.78,true,visual);
+    patiotomatoLeaf(200,121,-.7,.82,true,visual);
+    patiotomatoLeaf(197,109,-2.15,.82,false,visual);
+    patiotomatoLeaf(213,93,.65,.75,false,visual);
+    patiotomatoLeaf(196,90,3.05,.80,false,visual);
+    patiotomatoLeaf(200,82,2.3,.72,false,visual);
+    patiotomatoLeaf(204,73,-1.3,.50,false,visual);
+    patiotomatoLeaf(211,113,-.7,.78,false,visual);
+    patiotomatoLeaf(231,71,1.65,.65,false,visual);
+    patiotomatoLeaf(221,120,2.3,.70,true,visual);
+    patiotomatoLeaf(190,93,3.6,.70,false,visual);
     patiotomatoLeaf(170,108,3.0,.78,true,visual);
     patiotomatoLeaf(160,98,2.55,.58,true,visual);
     patiotomatoLeaf(200,121,2.78,.62,true,visual);
@@ -568,32 +737,15 @@ PPC.Render = (function () {
     patiotomatoLeaf(217,71,.82,.82,false,visual);
     patiotomatoLeaf(193,91,1.92,.78,false,visual);
     patiotomatoLeaf(207,89,1.08,.8,false,visual);
-    septoriaLesions([[156,106],[166,111],[218,113],[228,108],[163,116],[235,86],[169,120],[226,120],[153,111],[166,101]],visual.lesionColor,visual.centerColor);
-    line(207,92,220,84,2,"#386840");
-    line(190,89,184,83,2,"#386840");
     patiotomatoFruit(220,84,6,false);
     patiotomatoFruit(184,83,5,false);
     patiotomatoFruit(209,79,5,true);
     patiotomatoFlower(240,72);
-    line(199,112,207,104,1.8,"#386840");
     patiotomatoFlower(207,104);
     rect(185,130,30,3,"#493526");
     rect(188,128,5,2,"#8e6237");
     rect(205,129,4,2,"#725134");
     drawPot();
-  }
-
-  function drawFineDetailCue(x, y) {
-    if (mode === "zoom") return;
-    var blink = reducedMotion ? 1 : (Math.sin(Date.now() / 320) > 0 ? 1 : 0.55);
-    ctx.save();
-    ctx.globalAlpha = blink;
-    rect(x - 5, y - 5, 3, 1, "#fff4b3");
-    rect(x - 5, y - 5, 1, 3, "#fff4b3");
-    rect(x + 3, y + 4, 3, 1, "#fff4b3");
-    rect(x + 5, y + 2, 1, 3, "#fff4b3");
-    rect(x, y - 7, 1, 2, "#ffe07d");
-    ctx.restore();
   }
 
   function drawSevereSymptoms(visual) {
@@ -667,39 +819,33 @@ PPC.Render = (function () {
     if (visual.sprite === "rose") {
       drawRosePlant(visual);
       if (timeCrunch) drawSevereSymptoms(visual);
-      drawFineDetailCue(177, 91);
-      drawFineDetailCue(225, 88);
       return;
     }
     if (visual.sprite === "squash") {
       drawSquashPlant(visual);
       if (timeCrunch) drawSevereSymptoms(visual);
-      drawFineDetailCue(204, 84);
       return;
     }
     if (visual.sprite === "basil") {
       drawBasilPlant(visual);
       if (timeCrunch) drawSevereSymptoms(visual);
-      drawFineDetailCue(220, 94);
       return;
     }
     if (visual.sprite === "tomato") {
       drawTomatoPlant(visual);
       if (timeCrunch) drawSevereSymptoms(visual);
-      drawFineDetailCue(174, 112);
       return;
     }
   }
 
   function highlight(hx, hy, r) {
+    // One neutral attention cue per uninspected area: just the white ring.
     ctx.strokeStyle = "#ffffff";
     ctx.globalAlpha = reducedMotion ? 0.8 : 0.55 + Math.sin(Date.now() / 200) * 0.25;
     ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.arc(hx, hy, r, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = "#7fd67f";
-    ctx.fillRect(hx - 1.5, hy - 2.5, 3, 3);
     ctx.globalAlpha = 1;
   }
 
@@ -757,15 +903,23 @@ PPC.Render = (function () {
       var p = hotspotPos(h);
       var seen = inspected.indexOf(h.id) !== -1;
       if (!seen) highlight(p.x, p.y, p.r);
-      else if (mode !== "zoom") {
-        rect(p.x - 3.4, p.y - 3.4, 6.8, 6.8, "#ffffff");
-        ctx.fillStyle = "#2e5c1d";
-        ctx.font = "bold 5px monospace";
-        ctx.fillText("ok", p.x - 2.4, p.y + 1.2);
+      else {
+        // A quiet amber record symbol means examined, never healthy/resolved.
+        // Keep the symptom visible underneath; no white badge or green "OK".
+        var r = mode === "zoom" ? 5 : 3.7;
+        ctx.save();
+        ctx.strokeStyle = "#ddbd7e";
+        ctx.lineWidth = .8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+        line(p.x-r*.4,p.y-r*.28,p.x+r*.4,p.y-r*.28,.8,"#ddbd7e");
+        line(p.x-r*.4,p.y+r*.28,p.x+r*.2,p.y+r*.28,.8,"#ddbd7e");
+        ctx.restore();
       }
       if (hoverId === h.id) {
         var fontSize = mode === "zoom" ? 8 : 6;
-        var label = h.name.toUpperCase();
+        var label = (seen ? "INSPECTED: " : "") + h.name.toUpperCase();
         var labelHeight = mode === "zoom" ? 15 : 12;
         ctx.font = "bold " + fontSize + "px monospace";
         var labelWidth = Math.min(W - 12, Math.ceil(ctx.measureText(label).width) + 10);
@@ -860,8 +1014,336 @@ PPC.Render = (function () {
     drawHotspotsScreen(caseData, inspected, flipped, hoverId);
   }
 
+  // Inspection plates are composed at 240x160, never crops of the game scene.
+  // Tiny grains use plate pixels; botanical geometry and veins scale together.
+  function pixelOval(x, y, rx, ry, color) {
+    for (var row=-Math.floor(ry);row<=ry;row++) {
+      var half=Math.round(rx*Math.sqrt(Math.max(0,1-row*row/(ry*ry))));
+      if (half) rect(x-half,y+row,half*2,1,color);
+    }
+  }
+
+  function specimenFrame() {
+    rect(0,0,240,160,"#424b36");
+    rect(4,4,232,152,"#89906a");
+    rect(6,6,228,148,"#293e31");
+    rect(10,10,220,140,"#c7b98a");
+    rect(13,13,214,134,"#e4d7ae");
+    rect(16,16,208,128,"#ecdfb9");
+    // Quiet paper grain and corner brackets, not a diagnostic diagram or label.
+    for (var i=0;i<95;i++) {
+      rect(20+(i*47)%199,20+(i*31)%120,i%5 ? 1 : 2,1,i%3 ? "#e3d5ad" : "#f3e8c9");
+    }
+    [[18,18,1,1],[222,18,-1,1],[18,141,1,-1],[222,141,-1,-1]].forEach(function (p) {
+      line(p[0],p[1],p[0]+8*p[2],p[1],1,"#9e9b70");
+      line(p[0],p[1],p[0],p[1]+8*p[3],1,"#9e9b70");
+    });
+    for (var tick=0;tick<15;tick++) rect(85+tick*5,151,1,tick%5 ? 2 : 4,"#c4c29a");
+    [[5,5],[232,5],[5,152],[232,152]].forEach(function (p) { rect(p[0],p[1],2,2,"#ddd2a3"); });
+  }
+
+  function specimenStem(x0,y0,x1,y1,width) {
+    line(x0,y0,x1,y1,width,"#35583c");
+    line(x0-width*.13,y0,x1-width*.13,y1,width*.56,"#6e9251");
+    line(x0-width*.23,y0,x1-width*.23,y1,Math.max(1,width*.12),"#a3b776");
+  }
+
+  function rosePlateLeaf(x,y,angle,length,width,surface) {
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(angle);
+    line(-15,0,3,0,3,"#617a45");
+    roseBlade(0,0,0,length,width,surface === "under" ? "#78925c" : surface === "litter" ? "#b99a4b" : surface === "hidden" ? "#748552" : "#639b50",null);
+    var spots=[[.22,-.21],[.29,.39],[.37,-.49],[.46,.25],[.52,-.33],[.59,.5],[.67,-.37],[.75,.25],[.82,-.13]];
+    if (surface === "top") {
+      spots.forEach(function (p,i) {
+        var sx=p[0]*length, sy=p[1]*width;
+        pixelOval(sx,sy,3+i%2,2+i%2,"#c9bd54");
+        rect(sx-1,sy,2,1,"#daa348");
+      });
+    } else if (surface === "under" || surface === "litter") {
+      spots.forEach(function (p,i) {
+        var sx=p[0]*length, sy=p[1]*width;
+        pixelOval(sx+1,sy+2,3,2,"#667043");
+        pixelOval(sx,sy,3,2,"#914c25");
+        rect(sx-2,sy-1,4,2,"#c7752b");
+        rect(sx-1,sy-2,2,1,"#e5a24b");
+        rect(sx+3,sy+1,1,1,"#b47134");
+        if (i%2) rect(sx-4,sy-1,1,1,"#c88a3a");
+      });
+      line(2,1,length*.9,1,1,"#c1ca92");
+    } else if (surface === "hidden") {
+      for (var d=0;d<33;d++) {
+        var dx=length*(.2+(d%11)*.052), dy=((d*13)%17-8)*width*.06;
+        rect(dx,dy,1,1,d%2 ? "#a0a27b" : "#62724c");
+      }
+    }
+    ctx.restore();
+  }
+
+  function tomatoPlateLeaf(x,y,angle,length,height,diseased,yellow) {
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(angle);
+    line(-10,0,2,0,2,"#69864d");
+    tomatoLeaflet(0,0,length,height,0,yellow);
+    if (diseased) {
+      [[.24,-.12],[.3,.22],[.38,-.33],[.46,.25],[.51,-.17],[.59,.32],[.65,-.21],[.72,.13],[.81,-.04]].forEach(function (p,i) {
+        var sx=p[0]*length, sy=p[1]*height;
+        var radius=Math.max(2,Math.min(4,length*.022))+i%2;
+        pixelOval(sx,sy,radius,radius,"#504333");
+        pixelOval(sx,sy,radius-1,radius-1,"#c8c0a0");
+        if (i%3 !== 1) rect(sx,sy,1,1,"#272821");
+        if (i%3 === 0 && length>100) rect(sx-2,sy+1,1,1,"#3c3b2d");
+      });
+    }
+    ctx.restore();
+  }
+
+  function soilPlate(splashed) {
+    // A surface view: no invented root symptoms, pooled water, or fertilizer.
+    polygon([[22,108],[45,98],[86,101],[120,95],[166,100],[206,95],[220,109],[216,133],[22,133]],"#665239");
+    polygon([[24,109],[46,102],[87,106],[123,100],[170,105],[203,101],[218,111],[213,130],[26,130]],splashed ? "#987c50" : "#6e5a3c");
+    for (var i=0;i<105;i++) {
+      var x=28+(i*37)%184, y=108+(i*19)%21;
+      rect(x,y,i%4 === 0 ? 3 : 2,1,i%3 === 0 ? "#b19b6d" : i%3 === 1 ? "#493e2c" : "#887146");
+    }
+    if (splashed) {
+      [[35,110,52,113],[52,113,59,122],[74,105,82,113],[82,113,103,116],[133,108,143,115],[143,115,137,126],[172,109,188,113]].forEach(function (p) {
+        line(p[0],p[1],p[2],p[3],1,"#6d583b");
+      });
+    } else {
+      // A short terracotta rim frames crumbly, dark moist soil, without a puddle.
+      polygon([[21,129],[220,129],[216,138],[26,138]],"#81523b");
+      rect(25,130,191,3,"#b77c4c");
+      rect(30,133,182,2,"#9e693f");
+    }
+  }
+
+  function drawRoseInspection(id, flipped) {
+    if (id === "leaf_top") {
+      pixelOval(125,109,77,15,"#cbbf96");
+      rosePlateLeaf(46,100,-.2,151,43,"top");
+    } else if (id === "leaf_under") {
+      pixelOval(126,111,77,14,"#cbbf96");
+      rosePlateLeaf(43,101,-.19,155,43,flipped ? "under" : "hidden");
+    } else if (id === "fallen") {
+      // A pot-base fragment, not the whole plant; three separate fallen leaflets.
+      polygon([[30,27],[84,27],[79,72],[38,72]],"#a66d43");
+      rect(35,29,7,37,"#c99158");
+      rect(33,72,55,5,"#79503a");
+      pixelOval(121,121,86,12,"#cbb98d");
+      rosePlateLeaf(69,91,.16,99,26,"litter");
+      rosePlateLeaf(108,120,-.53,88,23,"litter");
+      rosePlateLeaf(36,116,-.54,76,21,"litter");
+      line(151,128,183,131,2,"#87724a");
+      rect(189,117,3,2,"#a58b5d");
+    } else if (id === "canopy") {
+      specimenStem(91,137,115,26,10);
+      specimenStem(116,137,104,30,9);
+      specimenStem(139,136,126,23,9);
+      specimenStem(116,111,61,49,6);
+      specimenStem(126,100,185,44,6);
+      specimenStem(96,96,167,64,5);
+      [[111,58,-1],[129,85,1],[103,117,-1]].forEach(function (p) {
+        polygon([[p[0],p[1]],[p[0]+p[2]*9,p[1]-3],[p[0]+p[2]*2,p[1]+5]],"#506640");
+      });
+      roseCompoundLeaf(101,92,3.35,1.75,null);
+      roseCompoundLeaf(125,88,-.24,1.85,null);
+      roseCompoundLeaf(117,53,3.48,1.55,null);
+      roseCompoundLeaf(123,122,-.35,1.7,null);
+    }
+  }
+
+  function drawSquashInspection(id) {
+    if (id === "powder_upper") {
+      pixelOval(121,116,84,14,"#cbbf96");
+      specimenStem(119,132,120,101,6);
+      squashLeaf(120,77,88,55,-.07,{color:"#efe9d9"});
+    } else if (id === "base_check") {
+      pixelOval(110,127,74,9,"#cbbf96");
+      specimenStem(98,132,80,38,13);
+      specimenStem(104,131,143,71,11);
+      specimenStem(101,112,52,83,8);
+      [[84,62,5,13],[92,99,4,12],[115,109,5,9],[127,91,4,8]].forEach(function (p,i) {
+        powderPatch(p[0],p[1],p[2],p[3],i+4);
+      });
+      // Clean reverse surface with prominent radiating veins, no gray fuzz.
+      ctx.save();
+      ctx.translate(160,65);
+      ctx.rotate(.19);
+      squashLeaf(0,0,52,35,0,null);
+      polygon([[0,28],[-28,-16],[-14,-9],[0,-30],[13,-9],[31,-17]],"#91a76f");
+      line(0,28,0,-28,2,"#c9d09a");
+      line(0,18,-33,-17,1.4,"#c9d09a");
+      line(0,18,33,-17,1.4,"#c9d09a");
+      line(0,18,-42,0,1,"#b7c48b");
+      line(0,18,42,0,1,"#b7c48b");
+      ctx.restore();
+    } else if (id === "spacing") {
+      // Tight rims and crossing petioles emphasize space, not added symptoms.
+      [[32,113],[92,114],[152,112]].forEach(function (p) {
+        polygon([[p[0],p[1]],[p[0]+54,p[1]],[p[0]+48,137],[p[0]+7,137]],"#a5754a");
+        rect(p[0]-2,p[1],58,5,"#c09259");
+        specimenStem(p[0]+28,p[1],p[0]+24,p[1]-45,6);
+      });
+      squashLeaf(72,56,51,33,-.25,null);
+      squashLeaf(156,52,55,34,.17,null);
+      squashLeaf(109,92,65,37,-.12,null);
+      squashLeaf(178,95,40,27,.2,null);
+    } else if (id === "soil") {
+      specimenStem(119,113,116,35,13);
+      specimenStem(117,76,78,52,7);
+      squashLeaf(70,48,37,25,-.22,null);
+      soilPlate(false);
+      // Soil sits above the stem foot; only healthy dry aerial tissue is shown.
+      rect(114,107,11,5,"#5f7044");
+    }
+  }
+
+  function drawBasilInspection(id, flipped) {
+    if (id === "angular_yellow") {
+      pixelOval(124,110,79,14,"#cbbf96");
+      specimenStem(30,108,55,101,4);
+      basilLeaf(47,99,-.16,5.25,true,false);
+    } else if (id === "downy_under") {
+      pixelOval(124,111,79,14,"#cbbf96");
+      specimenStem(30,108,55,101,4);
+      basilLeaf(47,99,-.16,5.25,true,flipped);
+      // Before turning, the folded far edge is merely dull and shadowed.
+      if (!flipped) {
+        polygon([[90,120],[122,123],[149,119],[167,109],[149,115],[121,119]],"#5d7546");
+      }
+    } else if (id === "curled_margin") {
+      pixelOval(124,115,76,13,"#cbbf96");
+      specimenStem(30,102,55,96,4);
+      basilLeaf(46,95,-.08,5.1,true,false);
+      // Rolled lower edge exposes a narrow fold; dead tissue advances inward.
+      polygon([[72,113],[91,124],[122,130],[150,124],[177,110],[187,94],[175,100],[162,111],[141,117],[118,121],[93,118]],"#5b4936");
+      polygon([[75,113],[93,119],[118,122],[144,118],[167,106],[177,101],[171,113],[148,125],[122,131],[96,126]],"#94734b");
+      polygon([[121,122],[141,117],[157,110],[153,119],[139,125],[125,127]],"#b49b65");
+      line(94,123,120,127,1,"#c4ab71");
+    } else if (id === "dense_canopy") {
+      specimenStem(99,139,104,28,9);
+      specimenStem(130,138,141,30,8);
+      specimenStem(116,137,113,45,7);
+      basilLeaf(106,53,3.43,2.7,false,false);
+      basilLeaf(115,54,-.3,3.1,false,false);
+      basilLeaf(104,82,3.16,2.75,false,false);
+      basilLeaf(127,79,-.18,3.05,false,false);
+      basilLeaf(114,113,3.39,3.15,false,false);
+      basilLeaf(118,112,-.15,3.25,false,false);
+      basilLeaf(141,49,-1.17,1.3,false,false);
+    }
+  }
+
+  function drawTomatoInspection(id) {
+    if (id === "septoria_spots") {
+      pixelOval(124,112,79,14,"#cbbf96");
+      tomatoPlateLeaf(44,98,-.16,158,67,true,false);
+    } else if (id === "lower_progression") {
+      // A short vertical branch sample compares old and new leaf tiers.
+      specimenStem(116,136,124,30,7);
+      specimenStem(121,59,99,50,3);
+      specimenStem(120,64,142,52,3);
+      tomatoPlateLeaf(103,51,3.35,65,34,false,false);
+      tomatoPlateLeaf(139,52,-.25,67,32,false,false);
+      specimenStem(118,101,95,106,4);
+      specimenStem(118,108,142,112,4);
+      tomatoPlateLeaf(96,106,3.35,67,37,true,true);
+      tomatoPlateLeaf(140,111,-.14,71,39,true,true);
+    } else if (id === "soil_splash") {
+      specimenStem(119,115,116,27,12);
+      specimenStem(117,81,79,68,5);
+      tomatoPlateLeaf(82,69,3.38,55,30,false,false);
+      soilPlate(true);
+      [[116,99],[123,88],[112,80],[118,71],[89,77],[77,69],[62,64],[109,107]].forEach(function (p,i) {
+        rect(p[0],p[1],i%2 ? 3 : 4,2,"#92754c");
+        rect(p[0]+1,p[1]+2,2,1,"#b49767");
+      });
+    } else if (id === "clean_fruit") {
+      pixelOval(131,120,59,12,"#cbbf96");
+      specimenStem(111,27,137,47,6);
+      specimenStem(132,43,153,53,4);
+      tomatoPlateLeaf(104,43,3.45,68,35,true,false);
+      patiotomatoFruit(139,87,39,false);
+      patiotomatoFruit(186,65,19,false);
+    }
+  }
+
+  var inspectionIds = {
+    rose: ["leaf_top","leaf_under","fallen","canopy"],
+    squash: ["powder_upper","base_check","spacing","soil"],
+    basil: ["angular_yellow","downy_under","curled_margin","dense_canopy"],
+    tomato: ["septoria_spots","lower_progression","soil_splash","clean_fruit"]
+  };
+
+  // Public API: the caller owns sizing, accessible text, and the flip button.
+  // Returns false for missing/unsupported inputs; flipped is a per-leaf boolean.
+  function drawCloseup(canvas, caseData, hotspot, flipped) {
+    if (!canvas || !canvas.getContext || !caseData || !hotspot || !canvas.width || !canvas.height) return false;
+    var sprite=caseData.visual && caseData.visual.sprite;
+    if (!inspectionIds[sprite] || inspectionIds[sprite].indexOf(hotspot.id) === -1) return false;
+    var detailCtx=canvas.getContext("2d");
+    if (!detailCtx) return false;
+    var previousCtx=ctx, previousMode=mode;
+    detailCtx.save();
+    try {
+      ctx=detailCtx;
+      mode="specimen";
+      ctx.setTransform(canvas.width/240,0,0,canvas.height/160,0,0);
+      ctx.imageSmoothingEnabled=false;
+      ctx.globalAlpha=1;
+      ctx.globalCompositeOperation="source-over";
+      ctx.shadowBlur=0;
+      ctx.shadowOffsetX=0;
+      ctx.shadowOffsetY=0;
+      ctx.lineCap="butt";
+      ctx.lineJoin="miter";
+      specimenFrame();
+      ctx.beginPath();
+      ctx.rect(17,17,206,126);
+      ctx.clip();
+      var turned=flipped === true && !!hotspot.flip;
+      if (sprite === "rose") drawRoseInspection(hotspot.id,turned);
+      else if (sprite === "squash") drawSquashInspection(hotspot.id);
+      else if (sprite === "basil") drawBasilInspection(hotspot.id,turned);
+      else if (sprite === "tomato") drawTomatoInspection(hotspot.id);
+      return true;
+    } finally {
+      detailCtx.restore();
+      ctx=previousCtx;
+      mode=previousMode;
+    }
+  }
+
+  function drawSpecimen(canvas, caseData, variant) {
+    var cxObj = canvas.getContext ? canvas.getContext("2d") : null;
+    if (!cxObj || !caseData) return false;
+    cxObj.save();
+    cxObj.fillStyle = "#f0e8c8";
+    cxObj.fillRect(0, 0, 160, 90);
+    cxObj.fillStyle = "#3b2a22";
+    cxObj.fillRect(2, 2, 156, 86);
+    cxObj.fillStyle = "#6e5d3c";
+    cxObj.font = "10px monospace";
+    cxObj.fillText((variant ? variant + "/" : "") + (caseData.plant ? caseData.plant.toUpperCase() : "PLANT"), 10, 16);
+    cxObj.fillStyle = "#47715a";
+    cxObj.fillRect(10, 22, 140, 12);
+    cxObj.fillStyle = "#416b4b";
+    cxObj.fillRect(12, 24, 8, 8);
+    cxObj.fillRect(24, 24, 8, 8);
+    cxObj.fillRect(36, 25, 6, 7);
+    cxObj.fillStyle = "#3b2a22";
+    cxObj.font = "9px monospace";
+    cxObj.fillText(variant ? variant : "original", 80, 38);
+    cxObj.restore();
+    return true;
+  }
+
   return {
     draw: draw,
+    drawCloseup: drawCloseup,
     plantBounds: plantBounds,
     hotspotPos: hotspotPos,
     customerRect: customerRect,

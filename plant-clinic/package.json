@@ -2,6 +2,6 @@
   "name": "pixel-plant-clinic",
   "private": true,
   "scripts": {
-    "test": "node tests/logic.test.js"
+    "test": "node tests/logic.test.js && node tests/rose-canopy.test.js"
   }
 }
