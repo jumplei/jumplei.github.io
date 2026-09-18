@@ -139,6 +139,11 @@ html, body {
   .header-case { grid-area: 2 / 1; }
   .header-progress { grid-area: 2 / 2; }
 }
+/* Two-row headers align the case copy with the brand text, not its icon.
+   Brand mark (40px) + brand gap (12px). Compact single-row headers are excluded. */
+@container clinic (min-width: 641px) and (max-width: 1050px) {
+  #game-wrap:not(.compact-landscape) .header-case { padding-inline-start: 52px; }
+}
 @container clinic (max-width: 640px) {
   /* main.js reserves this header height above the canvas at narrow widths. */
   .clinic-header { height: 136px; padding: 8px 12px; grid-template-rows: 38px 40px 24px; gap: 6px 10px; }
