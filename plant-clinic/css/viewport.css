@@ -1,0 +1,53 @@
+/* Short landscape is a wide game layout, never the three-row portrait header.
+   main.js contains the 16:9 canvas inside this full-width interface shell. */
+#stage { height: 100vh; height: 100dvh; --safe-bottom: env(safe-area-inset-bottom, 0px); }
+#game-wrap.compact-landscape { flex: none; background: #233a35; }
+#game-wrap.compact-landscape .clinic-header {
+  height: 48px; padding: 2px max(8px, env(safe-area-inset-right)) 2px max(8px, env(safe-area-inset-left));
+  grid-template-columns: minmax(110px, 1fr) minmax(80px, 1fr) auto auto;
+  grid-template-rows: 40px; gap: 8px; border-bottom-width: 2px;
+}
+.compact-landscape .clinic-brand, .compact-landscape .header-case,
+.compact-landscape .header-controls, .compact-landscape .header-progress,
+.compact-landscape .header-menu, .compact-landscape .header-mode { grid-area: auto; }
+.compact-landscape .clinic-brand { gap: 7px; padding-right: 0; border: 0; }
+.compact-landscape .brand-mark, .compact-landscape .brand-mark svg { width: 24px; height: 24px; }
+.compact-landscape .brand-title { font-size: 12px; }
+.compact-landscape .brand-credit { font-size: 8px; margin-top: 2px; }
+.compact-landscape .header-case-title { font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+.compact-landscape .header-case-subtitle { font-size: 10px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; }
+.compact-landscape .header-progress { gap: 5px; justify-content: end; }
+.compact-landscape .header-step { gap: 4px; }
+.compact-landscape .header-step + .header-step::before { display: none; }
+.compact-landscape .step-number { width: 20px; height: 20px; font-size: 10px; }
+.compact-landscape .step-label { display: none; }
+.compact-landscape .is-current .step-label { display: inline; font-size: 11px; }
+.compact-landscape .header-controls { display: flex; gap: 6px; }
+.compact-landscape .header-mode { display: none; }
+.compact-landscape .header-mode.is-emergency { display: flex; padding: 5px; }
+.compact-landscape .header-mode.is-emergency > span:not(.header-timer) { display: none; }
+.compact-landscape .header-menu-toggle { width: 44px; height: 44px; }
+#game-wrap.compact-landscape #patient-card { left: max(8px, env(safe-area-inset-left)); bottom: 72px; width: min(160px, 24%); padding: 8px; }
+.compact-landscape .patient-file-number { margin-bottom: 4px; }
+.compact-landscape .patient-quote { display: none; }
+.compact-landscape .patient-chart-link { min-height: 44px; }
+#game-wrap.compact-landscape #investigate-bar {
+  left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right));
+  bottom: max(6px, env(safe-area-inset-bottom)); width: auto; transform: none; padding: 4px;
+}
+.compact-landscape .clinic-dock .dock-action { flex-basis: 76px; height: 44px; gap: 2px; padding: 2px; font-size: 11px; }
+.compact-landscape .clinic-dock .tool-icon { width: 20px; height: 20px; flex-basis: 20px; }
+.compact-landscape .menu-case-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+#rotate-device {
+  position: fixed; inset: 0; z-index: 2500; display: grid; place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  color: #f2e8c8; background: radial-gradient(circle at 50% 35%, #456750, #223e33 75%);
+  text-align: center; outline: none; font-family: "Trebuchet MS", Arial, sans-serif;
+}
+#rotate-device[hidden] { display: none; }
+.rotate-card { max-width: 360px; }
+.rotate-card svg { margin-bottom: 24px; color: #d8d4a6; }
+.rotate-card h1 { font: normal 32px/1.15 Georgia, serif; margin-bottom: 18px; }
+.rotate-card p { font-size: 16px; line-height: 1.6; }
+.rotate-card > span { display: block; margin-top: 36px; font: 9px/1.6 "Courier New", monospace; letter-spacing: 1px; color: #c6ceae; }

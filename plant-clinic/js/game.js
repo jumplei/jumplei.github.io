@@ -7,6 +7,21 @@ PPC.Game = (function () {
   var ENTER_MS = 2600;
   var TIME_CRUNCH_MS = 3 * 60 * 1000;
   var PROGRESS_KEY = "pixelPlantClinicProgress";
+  var viewportPause = null;
+
+  function setViewportPaused(paused) {
+    if (paused) {
+      if (!viewportPause) viewportPause = { state: state, at: Date.now(), deadline: state && state.deadline, enterStart: state && state.enterStart };
+      return;
+    }
+    if (!viewportPause) return;
+    if (state && state === viewportPause.state) {
+      var elapsed = Math.max(0, Date.now() - viewportPause.at);
+      if (state.deadline && state.deadline === viewportPause.deadline) state.deadline += elapsed;
+      if (state.enterStart === viewportPause.enterStart) state.enterStart += elapsed;
+    }
+    viewportPause = null;
+  }
 
   function readProgress() {
     var fallback = { unlocked: 1, bestScores: {}, bestBadges: {}, failedAttempts: {}, completed: {} };
@@ -117,11 +132,12 @@ PPC.Game = (function () {
 
   function enterProgress() {
     if (!state || state.phase !== "intake" || state.intakeStep !== "entering") return 1;
-    return Math.min(1, (Date.now() - state.enterStart) / ENTER_MS);
+    var now = viewportPause && viewportPause.state === state ? viewportPause.at : Date.now();
+    return Math.min(1, (now - state.enterStart) / ENTER_MS);
   }
 
   function tickEnter() {
-    if (!state || state.phase !== "intake" || state.intakeStep !== "entering") return;
+    if (viewportPause || !state || state.phase !== "intake" || state.intakeStep !== "entering") return;
     if (Date.now() - state.enterStart >= ENTER_MS) {
       state.intakeStep = "dialogue";
       showDialogue();
@@ -149,7 +165,7 @@ PPC.Game = (function () {
   }
 
   function tickTimeCrunch(now) {
-    if (!state || !state.timeCrunch || !state.deadline || !isTimedPhase()) return;
+    if (viewportPause || !state || !state.timeCrunch || !state.deadline || !isTimedPhase()) return;
     var msLeft = state.deadline - (now || Date.now());
     if (msLeft <= 0) { expireTimeCrunch(); return; }
     var seconds = Math.ceil(msLeft / 1000);
@@ -721,6 +737,7 @@ PPC.Game = (function () {
     enterProgress: enterProgress,
     tickEnter: tickEnter,
     tickTimeCrunch: tickTimeCrunch,
+    setViewportPaused: setViewportPaused,
     formatTime: formatTime,
     toggleZoom: toggleZoom,
     advanceDialogue: advanceDialogue,

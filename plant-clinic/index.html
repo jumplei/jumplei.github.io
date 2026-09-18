@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>PIXEL PLANT CLINIC · BY ETHAN LEI</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/opening.css">
+  <link rel="stylesheet" href="css/viewport.css">
 </head>
 <body>
   <div id="stage">
@@ -17,6 +18,14 @@
       <div id="status" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     </div>
   </div>
+  <section id="rotate-device" role="dialog" aria-modal="true" aria-labelledby="rotate-title" aria-describedby="rotate-copy" tabindex="-1" hidden>
+    <div class="rotate-card">
+      <svg width="100" height="80" viewBox="0 0 100 80" aria-hidden="true"><rect x="16" y="22" width="68" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="3"/><path d="M74 10A32 32 0 0 0 20 12m0-10v12h12" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="77" cy="42" r="2" fill="currentColor"/></svg>
+      <h1 id="rotate-title">Rotate to landscape</h1>
+      <p id="rotate-copy">Turn your phone sideways to enter the clinic.</p>
+      <span>PIXEL PLANT CLINIC · BY ETHAN LEI</span>
+    </div>
+  </section>
   <script src="data/cases.js"></script>
   <script src="js/render.js"></script>
   <script src="js/portraits.js"></script>
