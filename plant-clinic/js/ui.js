@@ -100,7 +100,7 @@ PPC.UI = (function () {
         p.setAttribute("aria-label", "Pixel Plant Clinic dialog");
       }
       if (activeDialog !== p) return;
-      var first = p.querySelector && p.querySelector("[data-dialogue-focus], button:not([disabled]), input:not([disabled]), [tabindex='0']");
+      var first = p.querySelector && (p.querySelector("[data-dialogue-focus]") || p.querySelector("button:not([disabled]), input:not([disabled]), [tabindex='0']"));
       if (first && first.focus) first.focus();
       else if (p.focus) p.focus();
     }, 0);
@@ -498,6 +498,59 @@ PPC.UI = (function () {
     p.appendChild(btn("Continue to Clinic", "", function () { onContinue(); }));
   }
 
+  function recordedEntry(id) {
+    var state = PPC.Game.getState();
+    return state && state.notebook.find(function (entry) { return entry.id === id; });
+  }
+
+  function recordStatus(entry) {
+    var row = el("div", { cls: "record-feedback" });
+    row.appendChild(el("span", { cls: "record-status", text: "Recorded in case notes" }));
+    var link = btn("View record", "record-link", function () { PPC.Game.openNotebook(entry.id); });
+    link.setAttribute("data-view-record", entry.id);
+    row.appendChild(link);
+    return row;
+  }
+
+  function recordInterpretation(id, collapsible) {
+    var reflection = PPC.Game.recordReflection(id);
+    if (!reflection) return null;
+    var box = el(collapsible ? "details" : "section", { cls: "record-reflection" });
+    box.appendChild(el(collapsible ? "summary" : "div", {
+      cls: "record-kicker", text: "Interpretation · not a diagnosis",
+      tabindex: collapsible ? "0" : "-1"
+    }));
+    [["May suggest", reflection.suggests], ["Keep in mind", reflection.limits]].forEach(function (part) {
+      var line = el("p", { cls: "record-reason" });
+      line.appendChild(el("strong", { text: part[0] + ": " }));
+      line.appendChild(el("span", { text: part[1] }));
+      box.appendChild(line);
+    });
+    return box;
+  }
+
+  function highlightRecord(node) {
+    node.classList.add("record-just-added");
+    setTimeout(function () {
+      if (!node.isConnected) return;
+      node.classList.remove("record-just-added");
+      var label = node.querySelector(".record-status");
+      if (label) label.textContent = label.getAttribute("data-saved-label") || "Recorded in case notes";
+    }, 2200);
+  }
+
+  function recordAdded(entry) {
+    // The event comes only from a newly committed record, never from a revisit.
+    var nodes = activeDialog ? activeDialog.querySelectorAll("[data-record-id]") : [];
+    Array.prototype.forEach.call(nodes, function (node) {
+      if (node.getAttribute("data-record-id") !== entry.id) return;
+      var label = node.querySelector(".record-status");
+      if (label) label.textContent = "Added to case notes";
+      highlightRecord(node);
+    });
+    announce("Added to case notes: " + entry.observation);
+  }
+
   function closeup(caseData, hotspot, showUnderside) {
     // Keep the original tool/canvas as the return target across area and side changes.
     var origin = activeDialog ? returnFocus : document.activeElement;
@@ -524,12 +577,22 @@ PPC.UI = (function () {
     body.appendChild(figure);
 
     var notes = el("section", { cls: "specimen-notes", "aria-label": "Examination notes" });
-    notes.appendChild(el("div", { cls: "specimen-kicker", text: underside ? "REVEALED OBSERVATION" : "OBSERVATION" }));
+    var recordId = (underside ? "flip:" : "observe:") + hotspot.id;
+    var entry = recordedEntry(recordId);
+    var observation = el("section", { cls: "record-observation" });
+    observation.appendChild(el("div", { cls: "specimen-kicker", text: underside ? "OBSERVATION (LEAF UNDERSIDE)" : "OBSERVATION" }));
     var noteId = "specimen-note-" + (++dialogCount);
-    notes.appendChild(el("p", { cls: "specimen-observation", id: noteId, text: description }));
+    observation.appendChild(el("p", { cls: "specimen-observation", id: noteId, text: description }));
+    if (entry) {
+      var saved = el("div", { cls: "specimen-record", "data-record-id": recordId });
+      saved.appendChild(el("span", { cls: "specimen-record-check", "aria-hidden": "true", text: "✓" }));
+      saved.appendChild(el("span", { cls: "record-status", "data-saved-label": "Saved to case notes", text: "Saved to case notes" }));
+      observation.appendChild(saved);
+    }
+    notes.appendChild(observation);
     p.setAttribute("aria-describedby", noteId);
     if (hotspot.flip) {
-      notes.appendChild(el("p", { cls: "specimen-hint", text: revealed ? "Both views are available. Turning again will not record duplicate evidence." : "Turn this leaf over to examine the hidden surface." }));
+      notes.appendChild(el("p", { cls: "specimen-hint", text: revealed ? "Turn the leaf to compare both sides." : "Turn this leaf over to examine the hidden surface." }));
       var flip = btn(underside ? "Return to first view" : hotspot.flip.label, "specimen-flip", function () {
         if (!revealed) PPC.Game.flipLeaf(hotspot);
         else closeup(caseData, hotspot, !underside);
@@ -537,17 +600,8 @@ PPC.UI = (function () {
       flip.setAttribute("data-action", "flip-specimen");
       notes.appendChild(flip);
     }
-    notes.appendChild(el("div", { cls: "specimen-saved", text: "✓ Observation saved to notebook" }));
-    notes.appendChild(el("div", { cls: "specimen-kicker specimen-areas-label", text: "EXAMINE ANOTHER AREA" }));
-    var areas = el("div", { cls: "specimen-areas", role: "group", "aria-label": "Plant inspection areas" });
-    caseData.hotspots.forEach(function (h, i) {
-      var current = h.id === hotspot.id;
-      var button = el("button", { cls: "specimen-area" + (current ? " selected" : ""), "data-area-id": h.id, "aria-pressed": String(current), on: function () { PPC.Game.inspectHotspot(h); } });
-      button.appendChild(el("span", { cls: "specimen-area-number", text: String(i + 1).padStart(2, "0") }));
-      button.appendChild(el("span", { text: h.name }));
-      areas.appendChild(button);
-    });
-    notes.appendChild(areas);
+    var interpretation = recordInterpretation(recordId, true);
+    if (interpretation) notes.appendChild(interpretation);
     body.appendChild(notes);
     p.appendChild(body);
     var footer = el("footer", { cls: "specimen-footer" });
@@ -569,7 +623,12 @@ PPC.UI = (function () {
       var reply = el("div", { cls: "dialogue-reply", id: replyId, tabindex: "-1", "data-dialogue-focus": "" });
       reply.appendChild(el("p", { cls: "dialogue-question", text: "You asked: " + selected.text }));
       reply.appendChild(el("p", { cls: "dialogue-line", text: selected.answer }));
+      var entry = recordedEntry("answer:" + selected.id);
+      reply.setAttribute("data-record-id", "answer:" + selected.id);
+      if (entry) reply.appendChild(recordStatus(entry));
       view.content.appendChild(reply);
+      var interpretation = recordInterpretation("answer:" + selected.id, false);
+      if (interpretation) view.content.appendChild(interpretation);
       view.panel.setAttribute("aria-describedby", replyId);
       view.footer.appendChild(el("span", { cls: "dialogue-progress", text: "Saved to notebook" }));
     } else {
@@ -606,15 +665,30 @@ PPC.UI = (function () {
     p.appendChild(btn("Back to Clinic", "ghost", function () { clear(); }));
   }
 
-  function notebook(caseData, state) {
+  function notebook(caseData, state, recordId) {
+    var origin = activeDialog ? returnFocus : document.activeElement;
     clear();
-    var p = panel("wide");
-    p.appendChild(el("h2", { text: "Clinic Notebook" }));
-    p.appendChild(el("p", { cls: "tiny", text: "Your discovered observations and the owner's answers." }));
+    var p = panel("wide case-notebook");
+    if (origin) returnFocus = origin;
+    var pending = state.notebook.filter(function (item) { return item.noteHighlightPending; });
+    var target = state.notebook.find(function (item) { return item.id === recordId; }) || pending[pending.length - 1];
+    var heading = el("h2", { text: "Clinic Notebook", tabindex: "-1" });
+    if (!target) heading.setAttribute("data-dialogue-focus", "");
+    p.appendChild(heading);
+    p.appendChild(el("p", { cls: "tiny", text: "What you observed and what the owner reported. Interpretations are possibilities to compare, not diagnoses." }));
     var list = el("div", { cls: "stack" });
     if (state.notebook.length === 0) list.appendChild(el("p", { cls: "tiny", text: "Nothing recorded yet." }));
     state.notebook.forEach(function (item) {
-      list.appendChild(el("div", { cls: "notebook-item " + item.kind, text: (item.kind === "answer" ? "[Owner said] " : "") + item.text }));
+      var row = el("article", { cls: "notebook-item record-note " + item.kind, "data-record-id": item.id });
+      row.appendChild(el("div", { cls: "record-kicker", text: item.kind === "answer" ? "OWNER REPORT" : "OBSERVATION" }));
+      var title = el("h3", { text: item.title || "Record", tabindex: target === item ? "0" : "-1" });
+      if (target === item) title.setAttribute("data-dialogue-focus", "");
+      row.appendChild(title);
+      row.appendChild(el("p", { cls: "record-fact", text: item.observation || item.text }));
+      var reflection = recordInterpretation(item.id, true);
+      if (reflection) row.appendChild(reflection);
+      if (item.noteHighlightPending) { highlightRecord(row); item.noteHighlightPending = false; }
+      list.appendChild(row);
     });
     p.appendChild(list);
     if (state.phase === "intake" || state.phase === "investigate") {
@@ -959,6 +1033,7 @@ PPC.UI = (function () {
     updateTimer: updateTimer,
     summary: summary,
     announce: announce,
+    recordAdded: recordAdded,
     toast: toast,
     el: el,
     btn: btn

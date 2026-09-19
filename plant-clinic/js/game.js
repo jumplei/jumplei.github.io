@@ -229,8 +229,24 @@ PPC.Game = (function () {
     }, state.timeCrunch);
   }
 
-  function recordNotebook(kind, text) {
-    state.notebook.push({ kind: kind, text: text });
+  function recordNotebook(kind, id, title, observation) {
+    if (state.notebook.some(function (entry) { return entry.id === id; })) return null;
+    var entry = { id: id, kind: kind, title: title, observation: observation,
+      text: title + (kind === "answer" ? " \u2192 " : ": ") + observation,
+      noteHighlightPending: true };
+    state.notebook.push(entry);
+    return entry;
+  }
+
+  function recordReflection(id) {
+    if (!state || !state.notebook.some(function (entry) { return entry.id === id; })) return null;
+    var notes = PPC.EvidenceReflections && PPC.EvidenceReflections[state.caseId];
+    var reflection = notes && notes[id];
+    return reflection ? { suggests: reflection.suggests, limits: reflection.limits } : null;
+  }
+
+  function notifyRecord(entry) {
+    if (entry && PPC.UI.recordAdded) PPC.UI.recordAdded(entry);
   }
 
   function addClue(clue) {
@@ -238,23 +254,28 @@ PPC.Game = (function () {
   }
 
   function inspectHotspot(h) {
-    if (state.phase !== "investigate") return;
+    if (!state || state.phase !== "investigate" || !h) return;
+    h = state.caseData.hotspots.find(function (area) { return area.id === h.id; });
+    if (!h) return;
+    var entry = null;
     if (state.hotspotsInspected.indexOf(h.id) === -1) {
       state.hotspotsInspected.push(h.id);
-      recordNotebook("observation", h.name + ": " + h.observation);
+      entry = recordNotebook("observation", "observe:" + h.id, h.name, h.observation);
       if (h.clue) { addClue(h.clue); }
     }
     PPC.UI.closeup(state.caseData, h);
-    PPC.UI.toast(h.name + " noted in notebook");
+    notifyRecord(entry);
   }
 
   function flipLeaf(h) {
-    if (!h.flip || state.flipped[h.id]) return;
+    if (!state || state.phase !== "investigate" || !h) return;
+    h = state.caseData.hotspots.find(function (area) { return area.id === h.id; });
+    if (!h || !h.flip || state.flipped[h.id] || state.hotspotsInspected.indexOf(h.id) === -1) return;
     state.flipped[h.id] = true;
-    recordNotebook("observation", h.name + " (flipped): " + h.flip.text);
+    var entry = recordNotebook("observation", "flip:" + h.id, h.name + " (underside)", h.flip.text);
     addClue(h.flip.clue);
     PPC.UI.closeup(state.caseData, h);
-    PPC.UI.toast("Key clue discovered!");
+    notifyRecord(entry);
   }
 
   function askQuestion(q) {
@@ -263,14 +284,16 @@ PPC.Game = (function () {
     q = state.caseData.questions.find(function (question) { return question.id === q.id; });
     if (!q) return;
     var recorded = state.asked.indexOf(q.id) !== -1;
+    var entry = null;
     if (!recorded) {
       if (state.asked.length >= state.caseData.maxQuestions) return;
       state.asked.push(q.id);
-      recordNotebook("answer", q.text + " \u2192 " + q.answer);
+      entry = recordNotebook("answer", "answer:" + q.id, q.text, q.answer);
       addClue(q.clue);
     }
-    // Revisit the same spoken answer without spending another question.
+    // Revisit without spending another question or repeating discovery feedback.
     PPC.UI.interview(state.caseData, state.asked, q.id);
+    notifyRecord(entry);
   }
 
   function openInterview() {
@@ -283,8 +306,8 @@ PPC.Game = (function () {
     PPC.UI.inspectList(state.caseData, state);
   }
 
-  function openNotebook() {
-    PPC.UI.notebook(state.caseData, state);
+  function openNotebook(recordId) {
+    if (state) PPC.UI.notebook(state.caseData, state, recordId);
   }
 
   function openPatientRecord() {
@@ -742,6 +765,7 @@ PPC.Game = (function () {
     toggleZoom: toggleZoom,
     advanceDialogue: advanceDialogue,
     beginInvestigate: beginInvestigate,
+    recordReflection: recordReflection,
     inspectHotspot: inspectHotspot,
     flipLeaf: flipLeaf,
     askQuestion: askQuestion,

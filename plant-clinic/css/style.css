@@ -205,7 +205,7 @@ html, body {
 .overlay.specimen-inspection {
   position: fixed;
   width: 900px;
-  height: 640px;
+  height: 580px;
   max-width: calc(100vw - 24px);
   max-height: calc(100dvh - 24px);
   display: flex;
@@ -233,13 +233,6 @@ html, body {
 .specimen-inspection button.btn:hover { background: #31543f; }
 .specimen-inspection button:focus-visible { outline: 2px solid #31543f; outline-offset: 2px; }
 .specimen-flip { width: 100%; }
-.specimen-saved { margin-top: 14px; font-size: 11px; color: #527345; }
-.specimen-areas-label { margin: 20px 0 8px; }
-.specimen-areas { display: grid; gap: 5px; }
-.specimen-area { display: flex; gap: 9px; align-items: center; padding: 8px; min-height: 38px; text-align: left; background: #eee9ce; border: 1px solid #c4c7a3; border-radius: 3px; color: #476348; cursor: pointer; font: 12px/1.3 "Trebuchet MS", Arial, sans-serif; }
-.specimen-area:hover { background: #e0e6c7; }
-.specimen-area.selected { background: #d9e2bf; border-color: #738a5b; }
-.specimen-area-number { color: #7c8766; font: 11px "Courier New", monospace; }
 .specimen-footer { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #c8cbaa; }
 .specimen-footer > span { color: #7b8167; font-size: 11px; }
 @media (max-width: 640px) {
@@ -845,6 +838,46 @@ button.menu-case-button {
   button.menu-case-button { margin-top: 6px; }
   .menu-tip { display: none; }
   .patient-record-row { grid-template-columns: 1fr; gap: 3px; font-size: 12px; }
+}
+
+/* Evidence feedback: a single quiet wash, never a blinking correctness cue. */
+/* Examination text sits directly on the shared paper, without nested cards. */
+.specimen-inspection .record-observation { padding: 0; border: 0; background: transparent; }
+.specimen-inspection .record-reflection { margin: 20px 0 0; padding: 0; border: 0; background: transparent; }
+.specimen-inspection .record-reflection summary { cursor: pointer; padding-block: 8px; font-size: 11px; line-height: 1.6; }
+.specimen-inspection .record-reflection summary::marker { color: #879079; }
+.specimen-inspection .record-reflection summary:focus-visible { outline: 2px solid #607e52; outline-offset: 3px; }
+.specimen-inspection .record-reflection .record-reason { font-size: 14px; line-height: 1.6; color: #5f6f5b; }
+/* Narrow two-column views need a little extra room for wrapped text. */
+@media (min-width: 641px) and (max-width: 800px) and (min-height: 700px) {
+  .overlay.specimen-inspection { height: 640px; }
+}
+.specimen-inspection .record-reason strong { font-weight: normal; color: inherit; }
+.specimen-record { margin: -4px 0 16px; color: #527345; line-height: 1.4; }
+.specimen-record .record-status { color: inherit; font-size: 12px; }
+.specimen-record-check { margin-right: 5px; font: 12px/1.4 "Trebuchet MS", Arial, sans-serif; }
+.specimen-record.record-just-added { animation-name: specimen-record-added; }
+@keyframes specimen-record-added { 0%, 25% { color: #365d3d; } 100% { color: #527345; } }
+.record-feedback { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.record-status { font: 11px/1.4 "Trebuchet MS", Arial, sans-serif; color: #626a4f; }
+button.record-link { min-height: 36px; padding: 5px 8px; border: 1px solid #aab694; border-radius: 3px; background: transparent; box-shadow: none; color: #385c45; font: 12px/1.3 "Trebuchet MS", Arial, sans-serif; text-transform: none; }
+button.record-link:hover { background: #e3e7cb; }
+.record-reflection { margin: 14px 0; padding: 10px 12px; background: #e9ead8; border-left: 2px solid #a4af94; color: #52634e; font-family: "Trebuchet MS", Arial, sans-serif; }
+.record-kicker { font: 10px/1.5 "Courier New", monospace; letter-spacing: .6px; text-transform: uppercase; color: #657258; }
+.record-reflection .record-reason { font-size: 12px; line-height: 1.55; margin: 8px 0 0; }
+.record-reason strong { color: #3e5945; }
+.record-note { padding: 12px 14px; }
+.record-note h3 { font-size: 14px; line-height: 1.4; margin: 5px 0; text-transform: none; letter-spacing: 0; }
+.record-note .record-fact { font-size: 13px; line-height: 1.55; margin: 6px 0; }
+.record-note .record-reflection { margin: 10px 0 0; }
+.record-note summary { cursor: pointer; padding-block: 5px; }
+.record-note summary:focus-visible, .record-note h3:focus-visible { outline: 2px solid #607e52; outline-offset: 3px; }
+.record-just-added { animation: record-added 2.2s ease-out 1; }
+@keyframes record-added { 0%, 25% { background-color: #f6e4b2; box-shadow: inset 3px 0 #b28c42; } 100% { background-color: #f5efd9; box-shadow: inset 0 0 transparent; } }
+@media (any-pointer: coarse) { button.record-link, .record-note summary, .specimen-inspection summary { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) {
+  .record-just-added { animation: none !important; background: #f6e4b2; }
+  .specimen-record.record-just-added { background: transparent; color: #486344; }
 }
 
 @media (prefers-reduced-motion: reduce) {
